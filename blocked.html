@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Blocked - Focus Mode</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            text-align: center;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 500px;
+            margin: 1rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+        
+        p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .motivation {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            font-style: italic;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .time-remaining {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        .tips {
+            text-align: left;
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+        
+        .tips h3 {
+            margin-top: 0;
+            color: #ffeb3b;
+        }
+        
+        .tips ul {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+        
+        .tips li {
+            margin: 0.5rem 0;
+            opacity: 0.9;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 2rem 1.5rem;
+            }
+            
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🎯</div>
+        <h1>Stay Focused!</h1>
+        <p>This site is blocked during your focus session. You're doing great!</p>
+        
+        <div class="time-remaining" id="timeRemaining">
+            Loading focus session info...
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div class="motivation" id="motivationText">
+            "The successful warrior is the average person with laser-like focus." - Bruce Lee
+        </div>
+        
+        <div class="buttons">
+            <button onclick="goBack()" id="backButton">← Go Back</button>
+            <button onclick="openFocusPanel()" id="focusButton">Focus Panel</button>
+        </div>
+        
+        <div class="tips">
+            <h3>💡 While you're here:</h3>
+            <ul>
+                <li>Take a deep breath and refocus on your goal</li>
+                <li>Drink some water to stay hydrated</li>
+                <li>Do a quick stretch or walk around</li>
+                <li>Write down your current thought to revisit later</li>
+                <li>Review your task list and prioritize</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const motivationalQuotes = [
+            "The successful warrior is the average person with laser-like focus. - Bruce Lee",
+            "Concentration is the secret of strength. - Ralph Waldo Emerson",
+            "Focus on being productive instead of busy. - Tim Ferriss",
+            "Where focus goes, energy flows. - Tony Robbins",
+            "The art of being wise is knowing what to overlook. - William James",
+            "It is during our darkest moments that we must focus to see the light. - Aristotle",
+            "Your focus determines your reality. - George Lucas"
+        ];
+        
+        function updateMotivation() {
+            const motivationEl = document.getElementById('motivationText');
+            const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+            motivationEl.textContent = randomQuote;
+        }
+        
+        function updateFocusInfo() {
+            // Try to get focus mode info from storage
+            chrome.storage.local.get(['focusModeActive'], (result) => {
+                if (result.focusModeActive) {
+                    // Get focus mode details from background script
+                    chrome.runtime.sendMessage({action: 'getFocusStatus'}, (response) => {
+                        if (response && response.active) {
+                            const timeRemaining = document.getElementById('timeRemaining');
+                            const progressFill = document.getElementById('progressFill');
+                            
+                            const elapsed = Date.now() - response.startTime - response.totalPausedTime;
+                            const remaining = Math.max(0, response.duration - elapsed);
+                            const progress = Math.min(100, (elapsed / response.duration) * 100);
+                            
+                            const minutes = Math.floor(remaining / 60000);
+                            const seconds = Math.floor((remaining % 60000) / 1000);
+                            
+                            timeRemaining.textContent = `Time remaining: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                            progressFill.style.width = `${progress}%`;
+                            
+                            if (response.paused) {
+                                timeRemaining.textContent += ' (Paused)';
+                            }
+                        }
+                    });
+                } else {
+                    document.getElementById('timeRemaining').textContent = 'Focus mode not active';
+                }
+            });
+        }
+        
+        function goBack() {
+            if (window.history.length > 1) {
+                window.history.back();
+            } else {
+                window.close();
+            }
+        }
+        
+        function openFocusPanel() {
+            chrome.runtime.sendMessage({action: 'openPopup'});
+        }
+        
+        // Initialize page
+        updateMotivation();
+        updateFocusInfo();
+        
+        // Update info every second
+        setInterval(updateFocusInfo, 1000);
+        
+        // Change motivation every 30 seconds
+        setInterval(updateMotivation, 30000);
+        
+        // Add some interactive elements
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                goBack();
+            }
+        });
+        
+        // Add click effect to container
+        const container = document.querySelector('.container');
+        container.addEventListener('click', (e) => {
+            if (e.target === container) {
+                container.style.transform = 'scale(1.02)';
+                setTimeout(() => {
+                    container.style.transform = 'scale(1)';
+                }, 150);
+            }
+        });
+    </script>
+</body>
+</html>

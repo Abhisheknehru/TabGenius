@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TabGenius</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <svg width="24" height="24" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="10" y="10" width="108" height="108" rx="12" fill="#4CAF50"/>
+                    <rect x="20" y="30" width="88" height="20" rx="6" fill="white" opacity="0.9"/>
+                    <rect x="20" y="60" width="88" height="20" rx="6" fill="white" opacity="0.6"/>
+                    <rect x="20" y="90" width="88" height="20" rx="6" fill="white" opacity="0.3"/>
+                </svg>
+                <h1>TabGenius</h1>
+            </div>
+            <div class="status-indicator" id="statusIndicator">
+                <span class="status-dot"></span>
+                <span id="statusText">Active</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="dashboard">
+                <span class="tab-icon">📊</span>
+                <span class="tab-label">Dashboard</span>
+            </button>
+            <button class="nav-tab" data-tab="focus">
+                <span class="tab-icon">🎯</span>
+                <span class="tab-label">Focus</span>
+            </button>
+            <button class="nav-tab" data-tab="actions">
+                <span class="tab-icon">⚡</span>
+                <span class="tab-label">Actions</span>
+            </button>
+            <button class="nav-tab" data-tab="ai">
+                <span class="tab-icon">🤖</span>
+                <span class="tab-label">AI</span>
+            </button>
+            <button class="nav-tab" data-tab="settings">
+                <span class="tab-icon">⚙️</span>
+                <span class="tab-label">Settings</span>
+            </button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="tab-content">
+            <!-- Dashboard Tab -->
+            <div class="tab-pane active" id="dashboard">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalTabs">0</div>
+                        <div class="stat-label">Total Tabs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="pinnedTabs">0</div>
+                        <div class="stat-label">Pinned</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="groupedTabs">0</div>
+                        <div class="stat-label">Groups</div>
+                    </div>
+                </div>
+
+                <div class="most-visited">
+                    <h2>Most Visited</h2>
+                    <div class="visited-item" id="mostVisitedItem">
+                        <div class="visited-info">
+                            <div class="visited-title">No data yet</div>
+                            <div class="visited-domain">Start browsing to see stats</div>
+                        </div>
+                        <div class="visited-count">0</div>
+                    </div>
+                </div>
+
+                <div class="recent-activity">
+                    <h2>Recent Activity</h2>
+                    <div class="activity-list">
+                        <div class="activity-item">
+                            <span class="activity-icon">📈</span>
+                            <span class="activity-text">Grouped 5 similar tabs</span>
+                            <span class="activity-time">2m ago</span>
+                        </div>
+                        <div class="activity-item">
+                            <span class="activity-icon">🧹</span>
+                            <span class="activity-text">Cleaned up 3 duplicate tabs</span>
+                            <span class="activity-time">5m ago</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Focus Tab -->
+            <div class="tab-pane" id="focus">
+                <div class="focus-section">
+                    <div class="focus-header">
+                        <h2>Focus Mode</h2>
+                        <div class="timer-display" id="timerDisplay">25:00</div>
+                    </div>
+                    <button class="focus-btn" id="focusBtn">
+                        <span class="focus-icon">🎯</span>
+                        Start Focus Session
+                    </button>
+                    <button class="pause-btn" id="pauseBtn">
+                        <span class="pause-icon">⏸️</span>
+                        Pause
+                    </button>
+                    <button class="stop-btn" id="stopBtn" disabled>
+                        <span class="stop-icon">⏹️</span>
+                        Stop
+                    </button>
+                    <div class="focus-settings">
+                        <label for="focusTime">Duration (minutes):</label>
+                        <input type="range" id="focusTime" min="5" max="120" value="25" step="5">
+                        <span id="focusTimeValue">25</span>
+                    </div>
+                </div>
+
+                <div class="focus-stats">
+                    <h3>Today's Focus</h3>
+                    <div class="focus-stats-grid">
+                        <div class="focus-stat">
+                            <div class="focus-stat-number">3</div>
+                            <div class="focus-stat-label">Sessions</div>
+                        </div>
+                        <div class="focus-stat">
+                            <div class="focus-stat-number">75</div>
+                            <div class="focus-stat-label">Minutes</div>
+                        </div>
+                        <div class="focus-stat">
+                            <div class="focus-stat-number">12</div>
+                            <div class="focus-stat-label">Streak</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="blocked-sites-section">
+                    <h3>Blocked Sites</h3>
+                    <div class="add-site-form">
+                        <input type="text" id="newSiteInput" placeholder="Enter domain to block">
+                        <button id="addSiteBtn">Add Site</button>
+                    </div>
+                    <div id="blockedSitesList" class="blocked-sites-list">
+                        <!-- Blocked sites will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Tab -->
+            <div class="tab-pane" id="actions">
+                <div class="actions-section">
+                    <h2>Quick Actions</h2>
+                    <div class="action-buttons">
+                        <button class="action-btn" id="summarizeBtn">
+                            <span class="action-icon">📄</span>
+                            <span class="action-text">Summarize Tab</span>
+                        </button>
+                        <button class="action-btn" id="groupTabsBtn">
+                            <span class="action-icon">📁</span>
+                            <span class="action-text">Group Similar</span>
+                        </button>
+                        <button class="action-btn" id="cleanupBtn">
+                            <span class="action-icon">🧹</span>
+                            <span class="action-text">Cleanup Tabs</span>
+                        </button>
+                        <button class="action-btn" id="duplicateBtn">
+                            <span class="action-icon">📋</span>
+                            <span class="action-text">Find Duplicates</span>
+                        </button>
+                        <button class="action-btn" id="bookmarkBtn">
+                            <span class="action-icon">🔖</span>
+                            <span class="action-text">Bookmark All</span>
+                        </button>
+                        <button class="action-btn" id="exportBtn">
+                            <span class="action-icon">📤</span>
+                            <span class="action-text">Export Tabs</span>
+                        </button>
+                        <!-- Add new action buttons -->
+                        <button id="pinMostUsedBtn" class="action-btn">
+                            <span class="action-icon">📌</span>
+                            <span class="action-label">Pin Most Used</span>
+                        </button>
+                        <button id="autoGroupBtn" class="action-btn">
+                            <span class="action-icon">📁</span>
+                            <span class="action-label">Auto Group</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bulk-actions">
+                    <h3>Bulk Actions</h3>
+                    <div class="bulk-controls">
+                        <select id="bulkActionSelect">
+                            <option value="close">Close Tabs</option>
+                            <option value="bookmark">Bookmark Tabs</option>
+                            <option value="mute">Mute Tabs</option>
+                            <option value="group">Group Tabs</option>
+                        </select>
+                        <button class="bulk-btn" id="executeBulkAction">Execute</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Tab -->
+            <div class="tab-pane" id="ai">
+                <div class="ai-section">
+                    <h2>AI Assistant</h2>
+                    <div class="ai-input-container">
+                        <textarea id="aiInput" placeholder="Ask about your tabs, get summaries, or analyze your browsing patterns..." rows="3"></textarea>
+                        <button class="ai-btn" id="aiBtn">Ask AI</button>
+                    </div>
+                    <div class="ai-response" id="aiResponse" style="display: none;">
+                        <div class="ai-response-text"></div>
+                    </div>
+                </div>
+
+                <div class="ai-suggestions">
+                    <h3>Smart Suggestions</h3>
+                    <div class="suggestion-list">
+                        <div class="suggestion-item">
+                            <span class="suggestion-icon">💡</span>
+                            <span class="suggestion-text">You have 3 similar tabs about "React tutorials"</span>
+                            <button class="suggestion-btn">Group</button>
+                        </div>
+                        <div class="suggestion-item">
+                            <span class="suggestion-icon">⚡</span>
+                            <span class="suggestion-text">Close 5 tabs you haven't used in 2 hours</span>
+                            <button class="suggestion-btn">Clean</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="ai-presets">
+                    <h3>Quick Prompts</h3>
+                    <div class="present-buttons">
+                        <button class="preset-btn" data-prompt="Summarize all my open tabs">📝 Summarize Tabs</button>
+                        <button class="preset-btn" data-prompt="Find duplicate tabs">🔍 Find Duplicates</button>
+                        <button class="preset-btn" data-prompt="Analyze my browsing patterns">📊 Analyze Patterns</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div class="tab-pane" id="settings">
+                <div class="settings">
+                    <h2>General Settings</h2>
+                    <div class="settings-options">
+                        <label>
+                            <input type="checkbox" id="enableNotifications" checked>
+                            Enable Notifications
+                        </label>
+                        <br>
+        
+                        <label>
+                            <input type="checkbox" id="autoGroupTabs" checked>
+                            Auto Group Similar Tabs
+                        </label>
+                        <br>
+                        <label>
+                            <input type="checkbox" id="focusModeEnabled">
+                            Enable Focus Mode
+                        </label>
+                        <br>
+                        <label>
+                            <input type="checkbox" id="autoCleanup">
+                            Auto Cleanup Inactive Tabs
+                        </label>
+                        <br>
+                    </div>
+                    <div class="automation-settings">
+                        <h3>Automation</h3>
+                        <div class="setting-item">
+                            <label for="autoPinEnabled">Auto-Pin Most Used Tabs</label>
+                            <input type="checkbox" id="autoPinEnabled" checked>
+                        </div>
+                
+                        <div class="setting-item">
+                            <label for="autoGroupEnabled">Auto-Group Similar Tabs</label>
+                            <input type="checkbox" id="autoGroupEnabled" checked>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cleanup-settings">
+                    <h3>Cleanup Settings</h3>
+                    <div class="cleanup-options">
+                        <label for="cleanupTime">Auto cleanup after (hours):</label>
+                        <input type="range" id="cleanupTime" min="1" max="24" value="2" step="1">
+                        <span id="cleanupTimeValue">2</span>
+                    </div>
+                </div>
+
+                <div class="theme-settings">
+                    <h3>Appearance</h3>
+                    <div class="theme-options">
+                        <label>
+                            <input type="radio" name="theme" value="light" checked>
+                            Light Theme
+                        </label>
+                        <label>
+                            <input type="radio" name="theme" value="dark">
+                            Dark Theme
+                        </label>
+                        <label>
+                            <input type="radio" name="theme" value="auto">
+                            Auto (System)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="export-import">
+                    <h3>Data Management</h3>
+                    <div class="data-buttons">
+                        <button class="data-btn" id="exportSettings">Export Settings</button>
+                        <button class="data-btn" id="importSettings">Import Settings</button>
+                        <button class="data-btn danger" id="resetSettings">Reset to Default</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
