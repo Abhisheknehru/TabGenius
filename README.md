@@ -1,9 +1,9 @@
-TabGenius Chrome Extension
+**TabGenius Chrome Extension**
 
 TabGenius is a lightweight Chrome extension designed to enhance productivity by helping users manage browser tabs and focus on tasks. It features an Organize View to view and manage open tabs and a Focus Mode with a countdown timer to maintain concentration. The extension is built with HTML, CSS, and JavaScript, using Chrome APIs for tab and storage management.
 Features
 
-This automatically pins frequently used tabs ,clears tabs and group automatically
+**This automatically pins frequently used tabs ,clears tabs and group automatically.**
 
 Organize View: Displays a list of open browser tabs with options to close or navigate to them.
 Focus Mode: Allows users to set a focus duration (in minutes) and start a countdown timer to stay on task.
@@ -11,8 +11,8 @@ Compact UI: Designed for a 400px-wide popup with minimal scrolling, optimized fo
 Notifications: Provides feedback for actions like starting or ending focus sessions.
 Persistent Focus Sessions: Uses chrome.storage.local to save focus session data across popup reloads.
 
-Installation
-Prerequisites
+**Installation
+Prerequisites**
 
 Google Chrome browser
 Basic understanding of Chrome extensions (for development or debugging)
@@ -23,22 +23,7 @@ Clone the Repository:
 git clone https://github.com/Abhisheknehru/tabgenius.git
 cd tabgenius
 
-
-File Structure:Ensure the following files are present:
-tabgenius/
-├── popup.html
-├── popup.js
-├── popup.css
-├── background.js
-├── manifest.json
-├── icons/
-│   ├── icon16.png
-│   ├── icon32.png
-│   ├── icon48.png
-│   └── icon128.png
-
-
-Load the Extension:
+**Load the Extension:**
 
 Open Chrome and navigate to chrome://extensions/.
 Enable Developer mode (toggle in the top-right corner).
@@ -67,7 +52,7 @@ Organize View: Displays open tabs with checkboxes, “Close,” and “Go” but
 Focus Mode: Allows setting a focus duration and starting a countdown timer.
 
 
-Focus Mode:
+**Focus Mode:**
 
 Enter a duration (1–480 minutes) in the input field.
 Click Start to begin the countdown timer (e.g., “25m 00s”).
@@ -75,7 +60,7 @@ Use +5 min to extend or End to stop the session.
 Timer persists across popup reloads using chrome.storage.local.
 
 
-Organize View:
+**Organize View:**
 
 Lists all open tabs with titles and hostnames (e.g., “Example (example.com)”).
 Click Close to close a tab or Go to navigate to it.
@@ -100,7 +85,7 @@ loadTabs called, getTabs response
 Note errors like View or button not found or Runtime error in sendMessage.
 
 
-Check Background Console:
+**Check Background Console:**
 
 Go to chrome://extensions/, click Inspect views: service worker under TabGenius.
 Look for:
@@ -112,7 +97,7 @@ Sending tabs: ...
 Check for Error querying tabs.
 
 
-Test View Switching:
+**Test View Switching:**
 
 Click “Organize” and “Focus” buttons.
 Verify the correct view appears (#organize-view or #focus-view shows).
@@ -149,13 +134,13 @@ Use http:// or https:// URLs, as chrome:// or file:// may be restricted.
 
 
 Development
-Technologies
+**Technologies**
 
 HTML/CSS/JavaScript: Core extension structure and logic.
 Chrome APIs: chrome.tabs, chrome.storage.local, chrome.notifications.
 Manifest V3: Modern Chrome extension framework.
 
-File Overview
+**File Overview**
 
 popup.html: Defines the popup UI with Organize and Focus views.
 popup.js: Handles view switching, timer logic, and tab management.
@@ -163,7 +148,7 @@ background.js: Manages tab queries and notifications.
 popup.css: Styles the popup (400px width, minimal scrolling).
 manifest.json: Declares permissions and extension metadata.
 
-Contributing
+**Contributing**
 
 Fork the repository.
 Create a feature branch (git checkout -b feature-name).
