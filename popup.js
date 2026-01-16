@@ -1,18 +1,36 @@
 // Smart Tab Manager - Complete Popup JavaScript with Chrome API Integration
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
   initializeNavigation();
   initializeDashboard();
-  initializeFocusMode();
+  
+  // Initialize focus mode and store instance for message listener
+  const focusModeInstance = initializeFocusMode();
+  
   initializeActions();
   initializeAI();
+  
+  // Initialize settings first, then load saved values
   initializeSettings();
-  loadUserSettings();
+  
+  // Load user settings after a short delay to ensure DOM is ready
+  await new Promise(resolve => setTimeout(resolve, 100));
+  await loadUserSettings();
 
   //new auto group features
   initializeAutoPinning();
   initializeAutoGrouping();
   trackTabUsage();
   updateSettingsForNewFeatures();
+
+  // Listen for focus mode state changes from background
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'focusModeStateChanged') {
+      // Reload focus mode state when background notifies of change
+      if (focusModeInstance && typeof focusModeInstance.loadState === 'function') {
+        focusModeInstance.loadState();
+      }
+    }
+  });
 });
 
 // Storage helper functions
@@ -31,12 +49,71 @@ function initializeNavigation() {
     tab.addEventListener('click', function() {
       const targetTab = this.getAttribute('data-tab');
       
+      // Don't handle settings tab here - it's now a sidebar
+      if (targetTab === 'settings') return;
+      
       navTabs.forEach(t => t.classList.remove('active'));
       tabPanes.forEach(p => p.classList.remove('active'));
       
       this.classList.add('active');
-      document.getElementById(targetTab).classList.add('active');
+      const targetPane = document.getElementById(targetTab);
+      if (targetPane) {
+        targetPane.classList.add('active');
+      }
     });
+  });
+
+  // Initialize sidebar toggle
+  initializeSidebar();
+}
+
+// Sidebar functionality
+function initializeSidebar() {
+  const settingsToggle = document.getElementById('settingsToggle');
+  const settingsClose = document.getElementById('settingsClose');
+  const settingsSidebar = document.getElementById('settingsSidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+  function openSidebar() {
+    settingsSidebar.classList.add('active');
+    sidebarOverlay.classList.add('active');
+    document.body.classList.add('sidebar-open');
+    // Save sidebar state
+    storage.set({ sidebarOpen: true });
+  }
+
+  function closeSidebar() {
+    settingsSidebar.classList.remove('active');
+    sidebarOverlay.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
+    // Save sidebar state
+    storage.set({ sidebarOpen: false });
+  }
+
+  if (settingsToggle) {
+    settingsToggle.addEventListener('click', openSidebar);
+  }
+
+  if (settingsClose) {
+    settingsClose.addEventListener('click', closeSidebar);
+  }
+
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', closeSidebar);
+  }
+
+  // Load sidebar state
+  storage.get(['sidebarOpen']).then(data => {
+    if (data.sidebarOpen) {
+      openSidebar();
+    }
+  });
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && settingsSidebar.classList.contains('active')) {
+      closeSidebar();
+    }
   });
 }
 
@@ -174,6 +251,9 @@ function initializeFocusMode() {
   // Initialize timer display
   updateTimerDisplay();
 
+  // Load focus mode state from storage on initialization
+  loadFocusModeState();
+
   // Update slider value display
   if (focusTimeSlider) {
     focusTimeSlider.addEventListener('input', function() {
@@ -284,9 +364,36 @@ function initializeFocusMode() {
       clearInterval(focusTimer);
     }
     
-    focusTimer = setInterval(() => {
+    focusTimer = setInterval(async () => {
       if (!isPaused) {
-        timeLeft--;
+        // Sync with background state every 5 seconds
+        if (Math.floor(timeLeft) % 5 === 0) {
+          try {
+            const response = await new Promise((resolve, reject) => {
+              chrome.runtime.sendMessage({ action: 'getFocusModeState' }, (response) => {
+                if (chrome.runtime.lastError) {
+                  reject(chrome.runtime.lastError);
+                } else {
+                  resolve(response);
+                }
+              });
+            });
+            
+            if (response && response.active && !response.paused) {
+              // Calculate remaining time from background state
+              const currentTime = Date.now();
+              const elapsed = currentTime - response.startTime - response.totalPausedTime;
+              const remaining = Math.max(0, Math.floor((response.duration - elapsed) / 1000));
+              timeLeft = remaining;
+            }
+          } catch (error) {
+            // If sync fails, just decrement local timer
+            timeLeft--;
+          }
+        } else {
+          timeLeft--;
+        }
+        
         updateTimerDisplay();
         
         if (timeLeft <= 0) {
@@ -378,6 +485,69 @@ function initializeFocusMode() {
       const minutes = Math.floor(timeLeft / 60);
       const seconds = timeLeft % 60;
       timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+  }
+
+  // Load focus mode state from storage and sync with background
+  async function loadFocusModeState() {
+    try {
+      // First, try to get state from background script
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ action: 'getFocusModeState' }, (response) => {
+          if (chrome.runtime.lastError) {
+            // If background script is not ready, try storage
+            resolve(null);
+          } else {
+            resolve(response);
+          }
+        });
+      });
+
+      if (response && response.active) {
+        // Focus mode is active in background
+        const state = response;
+        isActive = true;
+        isPaused = state.paused || false;
+        
+        // Calculate remaining time using the updated state
+        const currentTime = Date.now();
+        let elapsed;
+        
+        if (state.paused) {
+          // When paused, elapsed time is frozen at pausedAt
+          elapsed = state.pausedAt - state.startTime - state.totalPausedTime;
+        } else {
+          // When running, calculate current elapsed time
+          elapsed = currentTime - state.startTime - state.totalPausedTime;
+        }
+        
+        timeLeft = Math.max(0, Math.floor((state.duration - elapsed) / 1000));
+        originalTime = Math.floor(state.duration / 1000);
+        
+        // Update UI to reflect active state
+        focusBtn.textContent = 'Focus Active';
+        focusBtn.disabled = true;
+        pauseBtn.style.display = 'inline-block';
+        stopBtn.style.display = 'inline-block';
+        
+        if (isPaused) {
+          pauseBtn.innerHTML = '<span class="pause-icon">▶️</span> Resume';
+        } else {
+          pauseBtn.innerHTML = '<span class="pause-icon">⏸️</span> Pause';
+          // Start the timer if not paused
+          startTimer();
+        }
+        
+        updateTimerDisplay();
+        console.log('Focus mode state loaded from background:', { isActive, isPaused, timeLeft, originalTime });
+      } else {
+        // No active focus mode - reset UI
+        resetFocusUI();
+      }
+    } catch (error) {
+      console.error('Failed to load focus mode state:', error);
+      // On error, reset UI to be safe
+      resetFocusUI();
     }
   }
 
@@ -604,6 +774,7 @@ function initializeFocusMode() {
     endFocusSession,
     pauseFocusSession,
     resumeFocusSession,
+    loadState: loadFocusModeState,
     isActive: () => isActive,
     isPaused: () => isPaused,
     timeLeft: () => timeLeft
@@ -1140,16 +1311,33 @@ function initializeAI() {
 function initializeSettings() {
   const settings = {
     enableNotifications: document.getElementById('enableNotifications'),
+    enableSoundNotifications: document.getElementById('enableSoundNotifications'),
+    showTabCount: document.getElementById('showTabCount'),
+    tabLimitWarning: document.getElementById('tabLimitWarning'),
     autoGroupTabs: document.getElementById('autoGroupTabs'),
-    focusModeEnabled: document.getElementById('focusModeEnabled'),
-    autoCleanup: document.getElementById('autoCleanup'),
+    autoGroupEnabled: document.getElementById('autoGroupEnabled'),
     autoPinEnabled: document.getElementById('autoPinEnabled'),
-    autoGroupEnabled: document.getElementById('autoGroupEnabled')
-
+    autoCleanup: document.getElementById('autoCleanup'),
+    autoSuspendTabs: document.getElementById('autoSuspendTabs'),
+    focusModeEnabled: document.getElementById('focusModeEnabled'),
+    autoBlockDistractions: document.getElementById('autoBlockDistractions'),
+    cleanupDuplicates: document.getElementById('cleanupDuplicates'),
+    cleanupEmptyGroups: document.getElementById('cleanupEmptyGroups'),
+    groupByDomain: document.getElementById('groupByDomain'),
+    groupByTitle: document.getElementById('groupByTitle'),
+    compactMode: document.getElementById('compactMode'),
+    showAnimations: document.getElementById('showAnimations'),
+    trackBrowsingHistory: document.getElementById('trackBrowsingHistory'),
+    enableAnalytics: document.getElementById('enableAnalytics'),
+    memoryOptimization: document.getElementById('memoryOptimization')
   };
 
   const cleanupTimeSlider = document.getElementById('cleanupTime');
   const cleanupTimeValue = document.getElementById('cleanupTimeValue');
+  const defaultFocusDurationSlider = document.getElementById('defaultFocusDuration');
+  const defaultFocusDurationValue = document.getElementById('defaultFocusDurationValue');
+  const maxTabsLimitInput = document.getElementById('maxTabsLimit');
+  const maxTabsPerGroupInput = document.getElementById('maxTabsPerGroup');
   const themeRadios = document.querySelectorAll('input[name="theme"]');
 
   // Settings change handlers
@@ -1158,15 +1346,38 @@ function initializeSettings() {
     if (setting) {
       setting.addEventListener('change', function() {
         saveSettings();
-        showActionResult('⚙️', `${settingId} ${this.checked ? 'enabled' : 'disabled'}`);
+        const settingName = settingId.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+        showActionResult('⚙️', `${settingName} ${this.checked ? 'enabled' : 'disabled'}`);
       });
     }
   });
 
   // Cleanup time slider
-  if (cleanupTimeSlider) {
+  if (cleanupTimeSlider && cleanupTimeValue) {
     cleanupTimeSlider.addEventListener('input', function() {
       cleanupTimeValue.textContent = this.value;
+      saveSettings();
+    });
+  }
+
+  // Default focus duration slider
+  if (defaultFocusDurationSlider && defaultFocusDurationValue) {
+    defaultFocusDurationSlider.addEventListener('input', function() {
+      defaultFocusDurationValue.textContent = this.value;
+      saveSettings();
+    });
+  }
+
+  // Max tabs limit input
+  if (maxTabsLimitInput) {
+    maxTabsLimitInput.addEventListener('change', function() {
+      saveSettings();
+    });
+  }
+
+  // Max tabs per group input
+  if (maxTabsPerGroupInput) {
+    maxTabsPerGroupInput.addEventListener('change', function() {
       saveSettings();
     });
   }
@@ -1182,7 +1393,9 @@ function initializeSettings() {
   // Data management buttons
   const exportBtn = document.getElementById('exportSettings');
   const importBtn = document.getElementById('importSettings');
+  const exportDataBtn = document.getElementById('exportData');
   const resetBtn = document.getElementById('resetSettings');
+  const clearDataBtn = document.getElementById('clearData');
 
   if (exportBtn) {
     exportBtn.addEventListener('click', async function() {
@@ -1192,7 +1405,7 @@ function initializeSettings() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `smart-tab-manager-settings-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `tabgenius-settings-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
         showActionResult('📤', 'Settings exported successfully');
@@ -1229,6 +1442,25 @@ function initializeSettings() {
     });
   }
 
+  if (exportDataBtn) {
+    exportDataBtn.addEventListener('click', async function() {
+      try {
+        const allData = await storage.get(null);
+        const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tabgenius-data-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showActionResult('💾', 'All data exported successfully');
+      } catch (error) {
+        console.error('Failed to export data:', error);
+        showActionResult('❌', 'Failed to export data');
+      }
+    });
+  }
+
   if (resetBtn) {
     resetBtn.addEventListener('click', function() {
       if (confirm('Are you sure you want to reset all settings to default?')) {
@@ -1238,16 +1470,41 @@ function initializeSettings() {
     });
   }
 
+  if (clearDataBtn) {
+    clearDataBtn.addEventListener('click', function() {
+      if (confirm('⚠️ WARNING: This will delete ALL your data including settings, history, and statistics. This action cannot be undone!\n\nAre you absolutely sure?')) {
+        storage.clear().then(() => {
+          resetToDefaults();
+          showActionResult('🗑️', 'All data cleared');
+          // Reload the page to reflect changes
+          setTimeout(() => location.reload(), 1000);
+        }).catch(error => {
+          console.error('Failed to clear data:', error);
+          showActionResult('❌', 'Failed to clear data');
+        });
+      }
+    });
+  }
+
   async function saveSettings() {
     try {
       const currentSettings = await getCurrentSettings();
+      // Save to both local storage and sync storage for persistence
       await storage.set({ userSettings: currentSettings });
+      await new Promise(resolve => {
+        chrome.storage.sync.set({ userSettings: currentSettings }, resolve);
+      });
       
       // Send settings to background script
-      chrome.runtime.sendMessage({
-        action: 'updateSettings',
-        settings: currentSettings
-      });
+      try {
+        chrome.runtime.sendMessage({
+          action: 'updateSettings',
+          settings: currentSettings
+        });
+      } catch (e) {
+        // Background script might not be ready, that's okay
+        console.log('Background script not ready:', e);
+      }
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
@@ -1256,15 +1513,30 @@ function initializeSettings() {
   async function getCurrentSettings() {
     return {
       enableNotifications: settings.enableNotifications?.checked || false,
+      enableSoundNotifications: settings.enableSoundNotifications?.checked || false,
+      showTabCount: settings.showTabCount?.checked || true,
+      tabLimitWarning: settings.tabLimitWarning?.checked || true,
+      maxTabsLimit: parseInt(maxTabsLimitInput?.value || '50'),
       autoGroupTabs: settings.autoGroupTabs?.checked || false,
-      focusModeEnabled: settings.focusModeEnabled?.checked || false,
-      autoCleanup: settings.autoCleanup?.checked || false,
-      cleanupTime: parseInt(cleanupTimeSlider?.value || '2'),
-      theme: document.querySelector('input[name="theme"]:checked')?.value || 'light',
-      autoPinEnabled: settings.autoPinEnabled?.checked || true,
       autoGroupEnabled: settings.autoGroupEnabled?.checked || true,
+      autoPinEnabled: settings.autoPinEnabled?.checked || true,
+      autoCleanup: settings.autoCleanup?.checked || false,
+      autoSuspendTabs: settings.autoSuspendTabs?.checked || false,
       cleanupTime: parseInt(cleanupTimeSlider?.value || '2'),
-      theme: document.querySelector('input[name="theme"]:checked')?.value || 'light'
+      cleanupDuplicates: settings.cleanupDuplicates?.checked || true,
+      cleanupEmptyGroups: settings.cleanupEmptyGroups?.checked || true,
+      focusModeEnabled: settings.focusModeEnabled?.checked || false,
+      defaultFocusDuration: parseInt(defaultFocusDurationSlider?.value || '25'),
+      autoBlockDistractions: settings.autoBlockDistractions?.checked || false,
+      maxTabsPerGroup: parseInt(maxTabsPerGroupInput?.value || '10'),
+      groupByDomain: settings.groupByDomain?.checked || true,
+      groupByTitle: settings.groupByTitle?.checked || true,
+      theme: document.querySelector('input[name="theme"]:checked')?.value || 'light',
+      compactMode: settings.compactMode?.checked || false,
+      showAnimations: settings.showAnimations?.checked || true,
+      trackBrowsingHistory: settings.trackBrowsingHistory?.checked || true,
+      enableAnalytics: settings.enableAnalytics?.checked || false,
+      memoryOptimization: settings.memoryOptimization?.checked || true
     };
   }
 
@@ -1278,6 +1550,20 @@ function initializeSettings() {
       root.style.setProperty('--text-color', '#ffffff');
       root.style.setProperty('--card-bg', '#2d2d2d');
       root.style.setProperty('--border-color', '#404040');
+    } else if (theme === 'auto') {
+      // Auto theme - use system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        root.style.setProperty('--bg-color', '#1a1a1a');
+        root.style.setProperty('--text-color', '#ffffff');
+        root.style.setProperty('--card-bg', '#2d2d2d');
+        root.style.setProperty('--border-color', '#404040');
+      } else {
+        root.style.setProperty('--bg-color', '#ffffff');
+        root.style.setProperty('--text-color', '#333333');
+        root.style.setProperty('--card-bg', '#f8f9fa');
+        root.style.setProperty('--border-color', '#e0e0e0');
+      }
     } else {
       root.style.setProperty('--bg-color', '#ffffff');
       root.style.setProperty('--text-color', '#333333');
@@ -1286,24 +1572,37 @@ function initializeSettings() {
     }
   }
 
+  // Make applyTheme globally accessible
+  window.applyTheme = applyTheme;
+
   async function applyImportedSettings(importedSettings) {
     try {
-      if (importedSettings.enableNotifications !== undefined) {
-        settings.enableNotifications.checked = importedSettings.enableNotifications;
-      }
-      if (importedSettings.autoGroupTabs !== undefined) {
-        settings.autoGroupTabs.checked = importedSettings.autoGroupTabs;
-      }
-      if (importedSettings.focusModeEnabled !== undefined) {
-        settings.focusModeEnabled.checked = importedSettings.focusModeEnabled;
-      }
-      if (importedSettings.autoCleanup !== undefined) {
-        settings.autoCleanup.checked = importedSettings.autoCleanup;
-      }
-      if (importedSettings.cleanupTime !== undefined) {
+      // Apply all checkbox settings
+      Object.keys(settings).forEach(settingId => {
+        if (importedSettings[settingId] !== undefined && settings[settingId]) {
+          settings[settingId].checked = importedSettings[settingId];
+        }
+      });
+
+      // Apply slider settings
+      if (importedSettings.cleanupTime !== undefined && cleanupTimeSlider && cleanupTimeValue) {
         cleanupTimeSlider.value = importedSettings.cleanupTime;
         cleanupTimeValue.textContent = importedSettings.cleanupTime;
       }
+      if (importedSettings.defaultFocusDuration !== undefined && defaultFocusDurationSlider && defaultFocusDurationValue) {
+        defaultFocusDurationSlider.value = importedSettings.defaultFocusDuration;
+        defaultFocusDurationValue.textContent = importedSettings.defaultFocusDuration;
+      }
+
+      // Apply number inputs
+      if (importedSettings.maxTabsLimit !== undefined && maxTabsLimitInput) {
+        maxTabsLimitInput.value = importedSettings.maxTabsLimit;
+      }
+      if (importedSettings.maxTabsPerGroup !== undefined && maxTabsPerGroupInput) {
+        maxTabsPerGroupInput.value = importedSettings.maxTabsPerGroup;
+      }
+
+      // Apply theme
       if (importedSettings.theme !== undefined) {
         const themeRadio = document.querySelector(`input[name="theme"][value="${importedSettings.theme}"]`);
         if (themeRadio) {
@@ -1311,12 +1610,7 @@ function initializeSettings() {
           applyTheme(importedSettings.theme);
         }
       }
-      if (importedSettings.autoPinEnabled !== undefined) {
-        settings.autoPinEnabled.checked = importedSettings.autoPinEnabled;
-      }
-      if (importedSettings.autoGroupEnabled !== undefined) {
-        settings.autoGroupEnabled.checked = importedSettings.autoGroupEnabled;
-      }
+
       await saveSettings();
     } catch (error) {
       console.error('Failed to apply imported settings:', error);
@@ -1324,16 +1618,49 @@ function initializeSettings() {
   }
 
   function resetToDefaults() {
-    settings.enableNotifications.checked = true;
-    settings.autoGroupTabs.checked = true;
-    settings.focusModeEnabled.checked = false;
-    settings.autoCleanup.checked = false;
-    settings.autoPinEnabled.checked = true;
-    settings.autoGroupEnabled.checked = true;
-    cleanupTimeSlider.value = 2;
-    cleanupTimeValue.textContent = '2';
-    document.querySelector('input[name="theme"][value="light"]').checked = true;
-    applyTheme('light');
+    // Reset all checkboxes
+    if (settings.enableNotifications) settings.enableNotifications.checked = true;
+    if (settings.enableSoundNotifications) settings.enableSoundNotifications.checked = false;
+    if (settings.showTabCount) settings.showTabCount.checked = true;
+    if (settings.tabLimitWarning) settings.tabLimitWarning.checked = true;
+    if (settings.autoGroupTabs) settings.autoGroupTabs.checked = true;
+    if (settings.autoGroupEnabled) settings.autoGroupEnabled.checked = true;
+    if (settings.autoPinEnabled) settings.autoPinEnabled.checked = true;
+    if (settings.autoCleanup) settings.autoCleanup.checked = false;
+    if (settings.autoSuspendTabs) settings.autoSuspendTabs.checked = false;
+    if (settings.focusModeEnabled) settings.focusModeEnabled.checked = false;
+    if (settings.autoBlockDistractions) settings.autoBlockDistractions.checked = false;
+    if (settings.cleanupDuplicates) settings.cleanupDuplicates.checked = true;
+    if (settings.cleanupEmptyGroups) settings.cleanupEmptyGroups.checked = true;
+    if (settings.groupByDomain) settings.groupByDomain.checked = true;
+    if (settings.groupByTitle) settings.groupByTitle.checked = true;
+    if (settings.compactMode) settings.compactMode.checked = false;
+    if (settings.showAnimations) settings.showAnimations.checked = true;
+    if (settings.trackBrowsingHistory) settings.trackBrowsingHistory.checked = true;
+    if (settings.enableAnalytics) settings.enableAnalytics.checked = false;
+    if (settings.memoryOptimization) settings.memoryOptimization.checked = true;
+
+    // Reset sliders
+    if (cleanupTimeSlider && cleanupTimeValue) {
+      cleanupTimeSlider.value = 2;
+      cleanupTimeValue.textContent = '2';
+    }
+    if (defaultFocusDurationSlider && defaultFocusDurationValue) {
+      defaultFocusDurationSlider.value = 25;
+      defaultFocusDurationValue.textContent = '25';
+    }
+
+    // Reset number inputs
+    if (maxTabsLimitInput) maxTabsLimitInput.value = 50;
+    if (maxTabsPerGroupInput) maxTabsPerGroupInput.value = 10;
+
+    // Reset theme
+    const lightTheme = document.querySelector('input[name="theme"][value="light"]');
+    if (lightTheme) {
+      lightTheme.checked = true;
+      applyTheme('light');
+    }
+
     saveSettings();
   }
 }
@@ -1341,36 +1668,71 @@ function initializeSettings() {
 // Load user settings on startup
 async function loadUserSettings() {
   try {
-    const data = await storage.get(['userSettings']);
+    // Try to get from sync storage first, then local storage
+    let data = await new Promise(resolve => {
+      chrome.storage.sync.get(['userSettings'], resolve);
+    });
+    
+    // If no sync data, try local storage
+    if (!data.userSettings) {
+      data = await storage.get(['userSettings']);
+    }
+    
     const userSettings = data.userSettings;
     
     if (userSettings) {
-      // Apply saved settings
-      const enableNotifications = document.getElementById('enableNotifications');
-      const autoGroupTabs = document.getElementById('autoGroupTabs');
-      const focusModeEnabled = document.getElementById('focusModeEnabled');
-      const autoCleanup = document.getElementById('autoCleanup');
+      // Apply all checkbox settings
+      const checkboxSettings = [
+        'enableNotifications', 'enableSoundNotifications', 'showTabCount', 'tabLimitWarning',
+        'autoGroupTabs', 'autoGroupEnabled', 'autoPinEnabled', 'autoCleanup', 'autoSuspendTabs',
+        'focusModeEnabled', 'autoBlockDistractions', 'cleanupDuplicates', 'cleanupEmptyGroups',
+        'groupByDomain', 'groupByTitle', 'compactMode', 'showAnimations',
+        'trackBrowsingHistory', 'enableAnalytics', 'memoryOptimization'
+      ];
+
+      checkboxSettings.forEach(settingId => {
+        const element = document.getElementById(settingId);
+        if (element && userSettings[settingId] !== undefined) {
+          element.checked = userSettings[settingId];
+        }
+      });
+
+      // Apply slider settings
       const cleanupTimeSlider = document.getElementById('cleanupTime');
       const cleanupTimeValue = document.getElementById('cleanupTimeValue');
-      const autoPinEnabled = document.getElementById('autoPinEnabled');
-      const autoGroupEnabled = document.getElementById('autoGroupEnabled');
-      
-      if (enableNotifications) enableNotifications.checked = userSettings.enableNotifications;
-      if (autoGroupTabs) autoGroupTabs.checked = userSettings.autoGroupTabs;
-      if (focusModeEnabled) focusModeEnabled.checked = userSettings.focusModeEnabled;
-      if (autoCleanup) autoCleanup.checked = userSettings.autoCleanup;
-      if (autoPinEnabled) autoPinEnabled.checked = userSettings.autoPinEnabled;
-      if (autoGroupEnabled) autoGroupEnabled.checked = userSettings.autoGroupEnabled;
-      if (cleanupTimeSlider) {
+      if (cleanupTimeSlider && userSettings.cleanupTime !== undefined) {
         cleanupTimeSlider.value = userSettings.cleanupTime;
-        cleanupTimeValue.textContent = userSettings.cleanupTime;
+        if (cleanupTimeValue) cleanupTimeValue.textContent = userSettings.cleanupTime;
+      }
+
+      const defaultFocusDurationSlider = document.getElementById('defaultFocusDuration');
+      const defaultFocusDurationValue = document.getElementById('defaultFocusDurationValue');
+      if (defaultFocusDurationSlider && userSettings.defaultFocusDuration !== undefined) {
+        defaultFocusDurationSlider.value = userSettings.defaultFocusDuration;
+        if (defaultFocusDurationValue) defaultFocusDurationValue.textContent = userSettings.defaultFocusDuration;
+      }
+
+      // Apply number inputs
+      const maxTabsLimitInput = document.getElementById('maxTabsLimit');
+      if (maxTabsLimitInput && userSettings.maxTabsLimit !== undefined) {
+        maxTabsLimitInput.value = userSettings.maxTabsLimit;
+      }
+
+      const maxTabsPerGroupInput = document.getElementById('maxTabsPerGroup');
+      if (maxTabsPerGroupInput && userSettings.maxTabsPerGroup !== undefined) {
+        maxTabsPerGroupInput.value = userSettings.maxTabsPerGroup;
       }
       
       // Apply theme
-      const themeRadio = document.querySelector(`input[name="theme"][value="${userSettings.theme}"]`);
-      if (themeRadio) {
-        themeRadio.checked = true;
-        applyTheme(userSettings.theme);
+      if (userSettings.theme) {
+        const themeRadio = document.querySelector(`input[name="theme"][value="${userSettings.theme}"]`);
+        if (themeRadio) {
+          themeRadio.checked = true;
+          // Apply theme using global function
+          if (window.applyTheme) {
+            window.applyTheme(userSettings.theme);
+          }
+        }
       }
     }
   } catch (error) {

@@ -615,7 +615,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
     case 'getFocusStatus':
       sendResponse(focusMode);
-      break;
+      return true;
+    case 'getFocusModeState':
+      // Update state before sending
+      updateFocusModeState();
+      sendResponse(focusMode);
+      return true; // Keep channel open for async response
     case 'contextMenuAction':
       handleContextMenuAction(request);
       break;

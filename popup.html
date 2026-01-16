@@ -18,9 +18,14 @@
                 </svg>
                 <h1>TabGenius</h1>
             </div>
-            <div class="status-indicator" id="statusIndicator">
-                <span class="status-dot"></span>
-                <span id="statusText">Active</span>
+            <div class="header-actions">
+                <div class="status-indicator" id="statusIndicator">
+                    <span class="status-dot"></span>
+                    <span id="statusText">Active</span>
+                </div>
+                <button class="settings-toggle-btn" id="settingsToggle" title="Settings">
+                    <span class="settings-icon-btn">⚙️</span>
+                </button>
             </div>
         </header>
 
@@ -41,10 +46,6 @@
             <button class="nav-tab" data-tab="ai">
                 <span class="tab-icon">🤖</span>
                 <span class="tab-label">AI</span>
-            </button>
-            <button class="nav-tab" data-tab="settings">
-                <span class="tab-icon">⚙️</span>
-                <span class="tab-label">Settings</span>
             </button>
         </nav>
 
@@ -237,7 +238,7 @@
 
                 <div class="ai-presets">
                     <h3>Quick Prompts</h3>
-                    <div class="present-buttons">
+                    <div class="preset-buttons">
                         <button class="preset-btn" data-prompt="Summarize all my open tabs">📝 Summarize Tabs</button>
                         <button class="preset-btn" data-prompt="Find duplicate tabs">🔍 Find Duplicates</button>
                         <button class="preset-btn" data-prompt="Analyze my browsing patterns">📊 Analyze Patterns</button>
@@ -245,85 +246,387 @@
                 </div>
             </div>
 
-            <!-- Settings Tab -->
-            <div class="tab-pane" id="settings">
-                <div class="settings">
-                    <h2>General Settings</h2>
-                    <div class="settings-options">
-                        <label>
-                            <input type="checkbox" id="enableNotifications" checked>
-                            Enable Notifications
-                        </label>
-                        <br>
-        
-                        <label>
-                            <input type="checkbox" id="autoGroupTabs" checked>
-                            Auto Group Similar Tabs
-                        </label>
-                        <br>
-                        <label>
-                            <input type="checkbox" id="focusModeEnabled">
-                            Enable Focus Mode
-                        </label>
-                        <br>
-                        <label>
-                            <input type="checkbox" id="autoCleanup">
-                            Auto Cleanup Inactive Tabs
-                        </label>
-                        <br>
-                    </div>
-                    <div class="automation-settings">
-                        <h3>Automation</h3>
-                        <div class="setting-item">
-                            <label for="autoPinEnabled">Auto-Pin Most Used Tabs</label>
-                            <input type="checkbox" id="autoPinEnabled" checked>
-                        </div>
-                
-                        <div class="setting-item">
-                            <label for="autoGroupEnabled">Auto-Group Similar Tabs</label>
-                            <input type="checkbox" id="autoGroupEnabled" checked>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="cleanup-settings">
-                    <h3>Cleanup Settings</h3>
-                    <div class="cleanup-options">
-                        <label for="cleanupTime">Auto cleanup after (hours):</label>
-                        <input type="range" id="cleanupTime" min="1" max="24" value="2" step="1">
-                        <span id="cleanupTimeValue">2</span>
-                    </div>
-                </div>
-
-                <div class="theme-settings">
-                    <h3>Appearance</h3>
-                    <div class="theme-options">
-                        <label>
-                            <input type="radio" name="theme" value="light" checked>
-                            Light Theme
-                        </label>
-                        <label>
-                            <input type="radio" name="theme" value="dark">
-                            Dark Theme
-                        </label>
-                        <label>
-                            <input type="radio" name="theme" value="auto">
-                            Auto (System)
-                        </label>
-                    </div>
-                </div>
-
-                <div class="export-import">
-                    <h3>Data Management</h3>
-                    <div class="data-buttons">
-                        <button class="data-btn" id="exportSettings">Export Settings</button>
-                        <button class="data-btn" id="importSettings">Import Settings</button>
-                        <button class="data-btn danger" id="resetSettings">Reset to Default</button>
-                    </div>
-                </div>
-            </div>
         </main>
     </div>
+
+    <!-- Settings Sidebar -->
+    <div class="settings-sidebar" id="settingsSidebar">
+        <div class="sidebar-header">
+            <h2>Settings</h2>
+            <button class="sidebar-close" id="settingsClose" title="Close Settings">
+                <span>✕</span>
+            </button>
+        </div>
+        <div class="settings-container">
+                    <!-- General Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">⚙️</span>
+                            <h3>General Settings</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="enableNotifications">Enable Notifications</label>
+                                    <span class="setting-description">Get alerts for tab management actions</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="enableNotifications" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="enableSoundNotifications">Sound Notifications</label>
+                                    <span class="setting-description">Play sounds for important events</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="enableSoundNotifications">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="showTabCount">Show Tab Count Badge</label>
+                                    <span class="setting-description">Display tab count on extension icon</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showTabCount" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="tabLimitWarning">Tab Limit Warning</label>
+                                    <span class="setting-description">Warn when approaching tab limit</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="tabLimitWarning" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="maxTabsLimit">Maximum Tabs Limit</label>
+                                    <span class="setting-description">Set maximum number of tabs before warning</span>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="number" id="maxTabsLimit" min="10" max="500" value="50" step="10">
+                                    <span class="setting-unit">tabs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Automation Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">🤖</span>
+                            <h3>Automation</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoGroupTabs">Auto Group Similar Tabs</label>
+                                    <span class="setting-description">Automatically group tabs with similar domains</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoGroupTabs" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoGroupEnabled">Auto-Group on Tab Open</label>
+                                    <span class="setting-description">Group tabs immediately when opened</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoGroupEnabled" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoPinEnabled">Auto-Pin Most Used Tabs</label>
+                                    <span class="setting-description">Automatically pin frequently visited tabs</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoPinEnabled" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoCleanup">Auto Cleanup Inactive Tabs</label>
+                                    <span class="setting-description">Automatically close unused tabs</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoCleanup">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoSuspendTabs">Auto Suspend Inactive Tabs</label>
+                                    <span class="setting-description">Suspend tabs to save memory instead of closing</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoSuspendTabs">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Focus Mode Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">🎯</span>
+                            <h3>Focus Mode</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="focusModeEnabled">Enable Focus Mode</label>
+                                    <span class="setting-description">Block distracting sites during focus sessions</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="focusModeEnabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="defaultFocusDuration">Default Focus Duration</label>
+                                    <span class="setting-description">Default timer duration for focus sessions</span>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="range" id="defaultFocusDuration" min="5" max="120" value="25" step="5">
+                                    <span id="defaultFocusDurationValue" class="setting-value">25</span>
+                                    <span class="setting-unit">min</span>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="autoBlockDistractions">Auto-Block Distractions</label>
+                                    <span class="setting-description">Automatically block known distracting sites</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="autoBlockDistractions">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cleanup Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">🧹</span>
+                            <h3>Cleanup Settings</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="cleanupTime">Auto Cleanup After</label>
+                                    <span class="setting-description">Hours of inactivity before cleanup</span>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="range" id="cleanupTime" min="1" max="24" value="2" step="1">
+                                    <span id="cleanupTimeValue" class="setting-value">2</span>
+                                    <span class="setting-unit">hrs</span>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="cleanupDuplicates">Auto-Remove Duplicates</label>
+                                    <span class="setting-description">Automatically close duplicate tabs</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="cleanupDuplicates" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="cleanupEmptyGroups">Remove Empty Groups</label>
+                                    <span class="setting-description">Automatically remove tab groups when empty</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="cleanupEmptyGroups" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grouping Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">📁</span>
+                            <h3>Grouping Settings</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="maxTabsPerGroup">Max Tabs Per Group</label>
+                                    <span class="setting-description">Maximum number of tabs in a single group</span>
+                                </div>
+                                <div class="setting-control">
+                                    <input type="number" id="maxTabsPerGroup" min="2" max="50" value="10" step="1">
+                                    <span class="setting-unit">tabs</span>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="groupByDomain">Group by Domain</label>
+                                    <span class="setting-description">Group tabs from the same domain together</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="groupByDomain" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="groupByTitle">Group by Title Similarity</label>
+                                    <span class="setting-description">Group tabs with similar titles</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="groupByTitle" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Appearance Settings -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">🎨</span>
+                            <h3>Appearance</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label>Theme</label>
+                                    <span class="setting-description">Choose your preferred color theme</span>
+                                </div>
+                                <div class="theme-options">
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme" value="light" checked>
+                                        <span class="theme-label">☀️ Light</span>
+                                    </label>
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme" value="dark">
+                                        <span class="theme-label">🌙 Dark</span>
+                                    </label>
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme" value="auto">
+                                        <span class="theme-label">🔄 Auto</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="compactMode">Compact Mode</label>
+                                    <span class="setting-description">Use a more compact interface layout</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="compactMode">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="showAnimations">Show Animations</label>
+                                    <span class="setting-description">Enable smooth transitions and animations</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="showAnimations" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Privacy & Performance -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">🔒</span>
+                            <h3>Privacy & Performance</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="trackBrowsingHistory">Track Browsing History</label>
+                                    <span class="setting-description">Store browsing patterns for smart suggestions</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="trackBrowsingHistory" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="enableAnalytics">Enable Analytics</label>
+                                    <span class="setting-description">Help improve TabGenius with usage data</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="enableAnalytics">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="setting-item">
+                                <div class="setting-info">
+                                    <label for="memoryOptimization">Memory Optimization</label>
+                                    <span class="setting-description">Optimize memory usage for better performance</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="memoryOptimization" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Data Management -->
+                    <div class="settings-section">
+                        <div class="settings-header">
+                            <span class="settings-icon">💾</span>
+                            <h3>Data Management</h3>
+                        </div>
+                        <div class="settings-content">
+                            <div class="data-buttons">
+                                <button class="data-btn" id="exportSettings">
+                                    <span class="btn-icon">📤</span>
+                                    Export Settings
+                                </button>
+                                <button class="data-btn" id="importSettings">
+                                    <span class="btn-icon">📥</span>
+                                    Import Settings
+                                </button>
+                                <button class="data-btn" id="exportData">
+                                    <span class="btn-icon">💾</span>
+                                    Export All Data
+                                </button>
+                                <button class="data-btn danger" id="resetSettings">
+                                    <span class="btn-icon">🔄</span>
+                                    Reset to Default
+                                </button>
+                                <button class="data-btn danger" id="clearData">
+                                    <span class="btn-icon">🗑️</span>
+                                    Clear All Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <script src="popup.js"></script>
 </body>
