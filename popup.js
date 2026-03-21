@@ -317,7 +317,7 @@ function initializeFocusMode() {
   async function startFocusSession() {
     try {
       console.log('Starting focus session...');
-      
+
       // Update UI state
       isActive = true;
       isPaused = false;
@@ -326,35 +326,34 @@ function initializeFocusMode() {
       pauseBtn.style.display = 'inline-block';
       stopBtn.style.display = 'inline-block';
       pauseBtn.innerHTML = '<span class="pause-icon">⏸️</span> Pause';
-      
+
       // Get current time from slider
       const minutes = parseInt(focusTimeSlider?.value || 25);
       timeLeft = minutes * 60;
       originalTime = minutes * 60;
-      
-      // Enable site blocking BEFORE starting timer
-      await enableSiteBlocking();
-      
-      // Send message to background script
+
+      // Delegate ALL focus logic to background (site blocking + alarms + state)
       try {
-        chrome.runtime.sendMessage({
-          action: 'startFocusMode',
-          duration: originalTime
+        await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({
+            action: 'startFocusMode',
+            duration: originalTime
+          }, (response) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(response);
+          });
         });
       } catch (error) {
         console.log('Background script communication failed:', error);
       }
-      
-      // Start the timer
+
+      // Start local UI timer (display only - background owns the real timer)
       startTimer();
-      
-      // Add activity
+
       await addActivity('🎯', 'Focus session started');
-      
       console.log('Focus session started successfully');
     } catch (error) {
       console.error('Failed to start focus session:', error);
-      // Reset UI on error
       resetFocusUI();
     }
   }
@@ -434,30 +433,29 @@ function initializeFocusMode() {
   async function endFocusSession(completed = false) {
     try {
       console.log('Ending focus session...');
-      
-      // Clear timer
+
+      // Clear local UI timer
       if (focusTimer) {
         clearInterval(focusTimer);
         focusTimer = null;
       }
-      
+
       // Reset UI
       resetFocusUI();
-      
-      // Disable site blocking
-      await disableSiteBlocking();
-      
-      // Send message to background script
+
+      // Delegate end to background (handles site unblocking + alarm cleanup + stats)
       try {
-        chrome.runtime.sendMessage({
-          action: 'endFocusMode'
+        await new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({ action: 'endFocusMode' }, (response) => {
+            if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else resolve(response);
+          });
         });
       } catch (error) {
         console.log('Background script communication failed:', error);
       }
 
       if (completed) {
-        // Show celebration effect
         showCelebrationEffect();
         playRewardSound();
         await addActivity('🎉', 'Focus session completed successfully!');
@@ -597,11 +595,6 @@ function initializeFocusMode() {
         blockedSites.push(site);
         await storage.set({ blockedSites });
         displayBlockedSites(blockedSites);
-        
-        // If focus mode is active, update blocking rules
-        if (isActive) {
-          await enableSiteBlocking();
-        }
       }
     } catch (error) {
       console.error('Failed to add blocked site:', error);
@@ -618,94 +611,14 @@ function initializeFocusMode() {
         blockedSites.splice(index, 1);
         await storage.set({ blockedSites });
         displayBlockedSites(blockedSites);
-        
-        // If focus mode is active, update blocking rules
-        if (isActive) {
-          await enableSiteBlocking();
-        }
       }
     } catch (error) {
       console.error('Failed to remove blocked site:', error);
     }
   }
 
-  async function enableSiteBlocking() {
-    try {
-      console.log('Enabling site blocking...');
-      
-      const data = await storage.get(['blockedSites']);
-      const blockedSites = data.blockedSites || DEFAULT_BLOCKED_SITES;
-      
-      // First, remove any existing rules
-      await disableSiteBlocking();
-      
-      // Create blocking rules for each site
-      const rules = [];
-      blockedSites.forEach((site, index) => {
-        // Rule for main domain
-        rules.push({
-          id: index * 2 + 1,
-          priority: 1,
-          action: { 
-            type: 'redirect', 
-            redirect: { url: chrome.runtime.getURL('blocked.html') } 
-          },
-          condition: {
-            urlFilter: `*://*.${site}/*`,
-            resourceTypes: ['main_frame']
-          }
-        });
-        
-        // Rule for exact domain
-        rules.push({
-          id: index * 2 + 2,
-          priority: 1,
-          action: { 
-            type: 'redirect', 
-            redirect: { url: chrome.runtime.getURL('blocked.html') } 
-          },
-          condition: {
-            urlFilter: `*://${site}/*`,
-            resourceTypes: ['main_frame']
-          }
-        });
-      });
-
-      // Apply the rules
-      if (rules.length > 0) {
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          addRules: rules
-        });
-      }
-
-      await storage.set({ focusModeActive: true });
-      console.log('Site blocking enabled for', blockedSites.length, 'sites');
-    } catch (error) {
-      console.error('Failed to enable site blocking:', error);
-      console.error('Error details:', error);
-    }
-  }
-
-  async function disableSiteBlocking() {
-    try {
-      console.log('Disabling site blocking...');
-      
-      // Get current rules and remove them
-      const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-      const ruleIds = existingRules.map(rule => rule.id);
-      
-      if (ruleIds.length > 0) {
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          removeRuleIds: ruleIds
-        });
-      }
-
-      await storage.set({ focusModeActive: false });
-      console.log('Site blocking disabled');
-    } catch (error) {
-      console.error('Failed to disable site blocking:', error);
-    }
-  }
+  // Site blocking is now fully handled by the background service worker.
+  // No duplicate logic here - popup only sends messages to background.
 
   function showCelebrationEffect() {
     // Create party popper effect
@@ -1154,7 +1067,9 @@ function initializeAI() {
   const aiInput = document.getElementById('aiInput');
   const aiResponse = document.getElementById('aiResponse');
   const presetButtons = document.querySelectorAll('.preset-btn');
-  const suggestionButtons = document.querySelectorAll('.suggestion-btn');
+
+  // Generate dynamic suggestions on load
+  generateSmartSuggestions();
 
   // AI query handling
   aiBtn.addEventListener('click', function() {
@@ -1178,14 +1093,6 @@ function initializeAI() {
       const prompt = this.getAttribute('data-prompt');
       aiInput.value = prompt;
       processAIQuery(prompt);
-    });
-  });
-
-  // Suggestion buttons
-  suggestionButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      const suggestionText = this.parentElement.querySelector('.suggestion-text').textContent;
-      processAIQuery(suggestionText.toLowerCase());
     });
   });
 
@@ -1304,6 +1211,195 @@ function initializeAI() {
       .slice(0, 3)
       .map(([category, count]) => `${category} (${count})`)
       .join(', ');
+  }
+}
+
+// Generate dynamic smart suggestions based on actual tab state
+async function generateSmartSuggestions() {
+  const suggestionList = document.getElementById('suggestionList');
+  if (!suggestionList) return;
+
+  try {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    const suggestions = [];
+
+    // 1. Check for duplicate tabs
+    const urlMap = {};
+    const duplicates = [];
+    tabs.forEach(tab => {
+      if (urlMap[tab.url]) {
+        duplicates.push(tab);
+      } else {
+        urlMap[tab.url] = tab;
+      }
+    });
+    if (duplicates.length > 0) {
+      suggestions.push({
+        icon: '📋',
+        text: `You have ${duplicates.length} duplicate tab${duplicates.length > 1 ? 's' : ''} — close them to declutter`,
+        action: 'closeDuplicates',
+        btnText: 'Close'
+      });
+    }
+
+    // 2. Check for groupable domains (2+ tabs from same domain, not already grouped)
+    const domainTabs = {};
+    tabs.forEach(tab => {
+      try {
+        const domain = new URL(tab.url).hostname;
+        if (!domain || tab.url.startsWith('chrome://')) return;
+        if (!domainTabs[domain]) domainTabs[domain] = [];
+        domainTabs[domain].push(tab);
+      } catch (e) { /* skip */ }
+    });
+
+    const ungroupedDomains = Object.entries(domainTabs)
+      .filter(([, tabs]) => tabs.length >= 2 && tabs.some(t => t.groupId === -1));
+
+    if (ungroupedDomains.length > 0) {
+      const topDomain = ungroupedDomains.sort((a, b) => b[1].length - a[1].length)[0];
+      const domainName = topDomain[0].replace('www.', '');
+      suggestions.push({
+        icon: '📁',
+        text: `${topDomain[1].length} tabs from "${domainName}" — group them together`,
+        action: 'groupSimilar',
+        btnText: 'Group'
+      });
+
+      if (ungroupedDomains.length > 1) {
+        const totalGroupable = ungroupedDomains.reduce((sum, [, t]) => sum + t.length, 0);
+        suggestions.push({
+          icon: '📂',
+          text: `${totalGroupable} tabs across ${ungroupedDomains.length} domains can be grouped`,
+          action: 'groupAll',
+          btnText: 'Group All'
+        });
+      }
+    }
+
+    // 3. Check for idle tabs (not accessed in 30+ minutes)
+    const now = Date.now();
+    const idleThreshold = 30 * 60 * 1000;
+    const idleTabs = tabs.filter(t =>
+      !t.active && !t.pinned && t.lastAccessed && (now - t.lastAccessed) > idleThreshold
+    );
+    if (idleTabs.length > 0) {
+      const hours = Math.round((now - Math.min(...idleTabs.map(t => t.lastAccessed))) / (60 * 60 * 1000));
+      suggestions.push({
+        icon: '⏰',
+        text: `${idleTabs.length} tab${idleTabs.length > 1 ? 's' : ''} idle for ${hours > 0 ? hours + 'h+' : '30m+'} — close to save memory`,
+        action: 'cleanupIdle',
+        btnText: 'Clean'
+      });
+    }
+
+    // 4. Tab overload warning
+    if (tabs.length > 20) {
+      suggestions.push({
+        icon: '⚠️',
+        text: `You have ${tabs.length} tabs open — consider closing some for better performance`,
+        action: 'none',
+        btnText: null
+      });
+    }
+
+    // 5. Check for muted audio tabs
+    const audibleTabs = tabs.filter(t => t.audible && !t.mutedInfo.muted);
+    if (audibleTabs.length > 1) {
+      suggestions.push({
+        icon: '🔇',
+        text: `${audibleTabs.length} tabs are playing audio — mute the ones you don't need`,
+        action: 'muteAll',
+        btnText: 'Mute All'
+      });
+    }
+
+    // 6. Unpinned frequently used tabs
+    const frequentDomains = Object.entries(domainTabs)
+      .filter(([, t]) => t.length >= 3 && t.every(tab => !tab.pinned))
+      .map(([domain]) => domain.replace('www.', ''));
+    if (frequentDomains.length > 0) {
+      suggestions.push({
+        icon: '📌',
+        text: `Consider pinning "${frequentDomains[0]}" — you have ${domainTabs[Object.keys(domainTabs).find(d => d.includes(frequentDomains[0]))]?.length || 3}+ tabs from it`,
+        action: 'none',
+        btnText: null
+      });
+    }
+
+    // 7. If nothing noteworthy
+    if (suggestions.length === 0) {
+      suggestions.push({
+        icon: '✅',
+        text: 'Your tabs look well-organized! No suggestions right now.',
+        action: 'none',
+        btnText: null
+      });
+    }
+
+    // Render suggestions
+    suggestionList.innerHTML = '';
+    suggestions.slice(0, 5).forEach(suggestion => {
+      const item = document.createElement('div');
+      item.className = 'suggestion-item';
+      item.innerHTML = `
+        <span class="suggestion-icon">${suggestion.icon}</span>
+        <span class="suggestion-text">${suggestion.text}</span>
+        ${suggestion.btnText ? `<button class="suggestion-btn" data-action="${suggestion.action}">${suggestion.btnText}</button>` : ''}
+      `;
+      suggestionList.appendChild(item);
+    });
+
+    // Wire up suggestion action buttons
+    suggestionList.querySelectorAll('.suggestion-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const action = this.getAttribute('data-action');
+        await executeSuggestionAction(action);
+        // Refresh suggestions after action
+        setTimeout(() => generateSmartSuggestions(), 500);
+      });
+    });
+
+  } catch (error) {
+    console.error('Failed to generate suggestions:', error);
+    suggestionList.innerHTML = `
+      <div class="suggestion-item">
+        <span class="suggestion-icon">❌</span>
+        <span class="suggestion-text">Could not analyze tabs</span>
+      </div>
+    `;
+  }
+}
+
+// Execute a suggestion action
+async function executeSuggestionAction(action) {
+  try {
+    switch (action) {
+      case 'closeDuplicates':
+        await findDuplicateTabs();
+        break;
+      case 'groupSimilar':
+      case 'groupAll':
+        await groupSimilarTabs();
+        break;
+      case 'cleanupIdle':
+        await cleanupInactiveTabs();
+        break;
+      case 'muteAll': {
+        const tabs = await chrome.tabs.query({ currentWindow: true, audible: true });
+        for (const tab of tabs) {
+          if (!tab.mutedInfo.muted) {
+            await chrome.tabs.update(tab.id, { muted: true });
+          }
+        }
+        showActionResult('🔇', `Muted ${tabs.length} tabs`);
+        await addActivity('🔇', `Muted ${tabs.length} audible tabs`);
+        break;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to execute suggestion action:', error);
+    showActionResult('❌', 'Action failed');
   }
 }
 

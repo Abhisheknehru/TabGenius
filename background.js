@@ -7,40 +7,39 @@ const storage = {
   set: (items) => chrome.storage.local.set(items),
   remove: (keys) => chrome.storage.local.remove(keys)
 };
-let focusModeInterval = null;
+// No in-memory state - everything is persisted to chrome.storage.local
+// This ensures state survives service worker restarts
 
-// Global state
-let focusMode = {
-  active: false,
-  startTime: null,
-  duration: 0,
-  paused: false,
-  pausedAt: null,
-  totalPausedTime: 0,
-  remainingTime: 0,
-  elapsedTime: 0
-};
+// Compute focus mode state from persisted data (no in-memory variables)
+async function getFocusModeState() {
+  const data = await storage.get(['focusModeState']);
+  const focusMode = data.focusModeState || {
+    active: false, startTime: null, duration: 0,
+    paused: false, pausedAt: null, totalPausedTime: 0
+  };
 
-function updateFocusModeState() {
-  if (!focusMode.active) return;
-  
+  if (!focusMode.active) return focusMode;
+
   const currentTime = Date.now();
-  
+  let elapsedTime;
+
   if (focusMode.paused) {
-    // When paused, elapsed time stays the same
-    focusMode.elapsedTime = focusMode.pausedAt - focusMode.startTime - focusMode.totalPausedTime;
+    elapsedTime = focusMode.pausedAt - focusMode.startTime - focusMode.totalPausedTime;
   } else {
-    // When running, calculate elapsed time
-    focusMode.elapsedTime = currentTime - focusMode.startTime - focusMode.totalPausedTime;
+    elapsedTime = currentTime - focusMode.startTime - focusMode.totalPausedTime;
   }
-  
-  // Calculate remaining time
-  focusMode.remainingTime = Math.max(0, focusMode.duration - focusMode.elapsedTime);
-  
+
+  focusMode.elapsedTime = elapsedTime;
+  focusMode.remainingTime = Math.max(0, focusMode.duration - elapsedTime);
+
   // Check if time is up
   if (focusMode.remainingTime <= 0 && focusMode.active) {
-    handleEndFocusMode();
+    await handleEndFocusMode();
+    focusMode.active = false;
+    focusMode.remainingTime = 0;
   }
+
+  return focusMode;
 }
 
 let userSettings = {
@@ -117,19 +116,17 @@ async function initializeExtension() {
   }
 }
 
-// Add this function to restore focus mode state on startup
+// Restore focus mode state on startup - re-create alarm if focus is active
 async function restoreFocusModeState() {
   try {
-    const data = await storage.get(['focusModeState']);
-    if (data.focusModeState && data.focusModeState.active) {
-      focusMode = data.focusModeState;
-      
-      // Restart the interval timer
-      focusModeInterval = setInterval(() => {
-        updateFocusModeState();
-        storage.set({ focusModeState: focusMode });
-      }, 1000);
-      
+    const focusMode = await getFocusModeState();
+    if (focusMode.active) {
+      // Ensure the alarm exists (it may have been lost on restart)
+      const existingAlarm = await chrome.alarms.get('focusTick');
+      if (!existingAlarm && !focusMode.paused) {
+        chrome.alarms.create('focusTick', { periodInMinutes: 1 });
+      }
+
       // Update badge
       if (focusMode.paused) {
         chrome.action.setBadgeText({ text: 'PAUSE' });
@@ -138,8 +135,8 @@ async function restoreFocusModeState() {
         chrome.action.setBadgeText({ text: 'FOCUS' });
         chrome.action.setBadgeBackgroundColor({ color: '#ff4444' });
       }
-      
-      console.log('Focus mode state restored:', focusMode);
+
+      console.log('Focus mode state restored');
     }
   } catch (error) {
     console.error('Failed to restore focus mode state:', error);
@@ -166,14 +163,14 @@ async function handleFirstInstall() {
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Smart Tab Manager',
         message: 'Welcome! Extension installed successfully. Click the icon to get started.'
       });
     }
 
-    // Open welcome page
-    chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+    // Open options page on first install
+    chrome.runtime.openOptionsPage();
   } catch (error) {
     console.error('Failed to handle first install:', error);
   }
@@ -189,7 +186,7 @@ async function handleUpdate(previousVersion) {
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Smart Tab Manager Updated',
         message: 'New features and improvements are now available!'
       });
@@ -326,7 +323,7 @@ async function groupSimilarTabs() {
     if (userSettings.enableNotifications && groupedCount > 0) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Tabs Grouped',
         message: `Grouped ${groupedCount} tabs by domain.`
       });
@@ -354,7 +351,7 @@ async function analyzeTab(tab) {
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Tab Analysis',
         message: `${analysis.domain} - ${analysis.status}`
       });
@@ -387,7 +384,7 @@ async function closeDuplicateTabs() {
       if (userSettings.enableNotifications) {
         chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'icon-48.png',
+          iconUrl: 'icons/icon48.png',
           title: 'Duplicates Closed',
           message: `Closed ${duplicates.length} duplicate tabs.`
         });
@@ -414,7 +411,7 @@ async function muteAllTabs() {
     if (userSettings.enableNotifications && mutedCount > 0) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Tabs Muted',
         message: `Muted ${mutedCount} tabs.`
       });
@@ -448,7 +445,7 @@ async function bookmarkCurrentSession() {
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon48.png',
         title: 'Session Bookmarked',
         message: `Bookmarked ${tabs.length} tabs to "${folderName}".`
       });
@@ -557,7 +554,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'autoCleanup') {
     await performAutoCleanup();
   } else if (alarm.name === 'focusMode') {
-    await endFocusMode();
+    // Focus timer expired
+    await handleEndFocusMode();
+  } else if (alarm.name === 'focusTick') {
+    // Periodic check - recompute state to detect expiration
+    await getFocusModeState();
+  } else if (alarm.name === 'memoryCleanup') {
+    // Clean up old activities
+    try {
+      const data = await storage.get(['recentActivities']);
+      const activities = data.recentActivities || [];
+      if (activities.length > 100) {
+        activities.splice(100);
+        await storage.set({ recentActivities: activities });
+      }
+    } catch (error) {
+      console.error('Memory cleanup failed:', error);
+    }
   }
 });
 
@@ -584,7 +597,7 @@ async function performAutoCleanup() {
       if (userSettings.enableNotifications) {
         chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'icon-48.png',
+          iconUrl: 'icons/icon48.png',
           title: 'Auto-cleanup Complete',
           message: `Closed ${closedCount} inactive tabs.`
         });
@@ -595,42 +608,81 @@ async function performAutoCleanup() {
   }
 }
 
-// Handle messages from popup
+// Handle messages from popup and content scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  switch (request.action) {
-    case 'startFocusMode':
-      handleStartFocusMode(request.duration);
-      break;
-    case 'pauseFocusMode':
-      handlePauseFocusMode();
-      break;
-    case 'resumeFocusMode':
-      handleResumeFocusMode();
-      break;
-    case 'endFocusMode':
-      handleEndFocusMode();
-      break;
-    case 'updateSettings':
-      handleUpdateSettings(request.settings);
-      break;
-    case 'getFocusStatus':
-      sendResponse(focusMode);
-      return true;
-    case 'getFocusModeState':
-      // Update state before sending
-      updateFocusModeState();
-      sendResponse(focusMode);
-      return true; // Keep channel open for async response
-    case 'contextMenuAction':
-      handleContextMenuAction(request);
-      break;
-  }
+  // Use async handler pattern to keep message channel open
+  (async () => {
+    switch (request.action) {
+      case 'startFocusMode':
+        await handleStartFocusMode(request.duration);
+        sendResponse({ success: true });
+        break;
+      case 'pauseFocusMode':
+        await handlePauseFocusMode();
+        sendResponse({ success: true });
+        break;
+      case 'resumeFocusMode':
+        await handleResumeFocusMode();
+        sendResponse({ success: true });
+        break;
+      case 'endFocusMode':
+        await handleEndFocusMode();
+        sendResponse({ success: true });
+        break;
+      case 'toggleFocusMode': {
+        const state = await getFocusModeState();
+        if (state.active) {
+          await handleEndFocusMode();
+        } else {
+          await handleStartFocusMode(request.duration || 25 * 60);
+        }
+        sendResponse({ success: true });
+        break;
+      }
+      case 'updateSettings':
+        await handleUpdateSettings(request.settings);
+        sendResponse({ success: true });
+        break;
+      case 'getFocusStatus':
+      case 'getFocusModeState': {
+        const focusState = await getFocusModeState();
+        sendResponse(focusState);
+        break;
+      }
+      case 'groupSimilarTabs':
+        await groupSimilarTabs();
+        sendResponse({ success: true });
+        break;
+      case 'closeDuplicates':
+        await closeDuplicateTabs();
+        sendResponse({ success: true });
+        break;
+      case 'updatePageAnalytics':
+        sendResponse({ success: true });
+        break;
+      case 'trackPageLoad':
+      case 'newTabOpened':
+      case 'linkClicked':
+      case 'longTaskDetected':
+      case 'memoryUsage':
+        sendResponse({ success: true });
+        break;
+      case 'contextMenuAction':
+        handleContextMenuAction(request);
+        sendResponse({ success: true });
+        break;
+      default:
+        sendResponse({ success: true });
+        break;
+    }
+  })();
+  return true; // Keep channel open for async response
 });
 
 // Handle start focus mode
 async function handleStartFocusMode(duration) {
   try {
-    focusMode = {
+    const focusModeState = {
       active: true,
       startTime: Date.now(),
       duration: duration * 1000, // Convert to milliseconds
@@ -639,20 +691,17 @@ async function handleStartFocusMode(duration) {
       totalPausedTime: 0
     };
     // Save focus mode state to storage for persistence
-    await storage.set({ focusModeState: focusMode });
-
-    // Start the interval timer to update state every second
-    focusModeInterval = setInterval(() => {
-      updateFocusModeState();
-      // Also save updated state to storage
-      storage.set({ focusModeState: focusMode });
-    }, 1000);
+    await storage.set({ focusModeState });
 
     // Enable site blocking
     await enableSiteBlocking();
 
-    // Set alarm for focus mode end
-    chrome.alarms.create('focusMode', { delayInMinutes: duration / 60 });
+    // Set alarm for focus mode end (exact end time)
+    const durationMinutes = duration / 60;
+    chrome.alarms.create('focusMode', { delayInMinutes: durationMinutes });
+
+    // Set periodic alarm to check state (every 1 minute)
+    chrome.alarms.create('focusTick', { periodInMinutes: 1 });
 
     // Update badge
     chrome.action.setBadgeText({ text: 'FOCUS' });
@@ -661,13 +710,13 @@ async function handleStartFocusMode(duration) {
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon128.png',
         title: 'Focus Mode Started',
-        message: `Focus session started for ${Math.round(duration / 60)} minutes.`
+        message: `Focus session started for ${Math.round(durationMinutes)} minutes.`
       });
     }
 
-    console.log('Focus mode started:', focusMode);
+    console.log('Focus mode started');
   } catch (error) {
     console.error('Failed to start focus mode:', error);
   }
@@ -675,97 +724,93 @@ async function handleStartFocusMode(duration) {
 
 // Handle pause focus mode
 async function handlePauseFocusMode() {
-  if (focusMode.active && !focusMode.paused) {
-    focusMode.paused = true;
-    focusMode.pausedAt = Date.now();
+  const data = await storage.get(['focusModeState']);
+  const focusModeState = data.focusModeState;
+  if (focusModeState && focusModeState.active && !focusModeState.paused) {
+    focusModeState.paused = true;
+    focusModeState.pausedAt = Date.now();
 
-    // Save state to storage
-    await storage.set({ focusModeState: focusMode });
-    
-    // Clear the alarm
+    await storage.set({ focusModeState });
+
+    // Clear alarms while paused
     chrome.alarms.clear('focusMode');
-    
+    chrome.alarms.clear('focusTick');
+
     // Update badge
     chrome.action.setBadgeText({ text: 'PAUSE' });
     chrome.action.setBadgeBackgroundColor({ color: '#ffaa00' });
-    
+
     console.log('Focus mode paused');
   }
 }
 
 // Handle resume focus mode
 async function handleResumeFocusMode() {
-  if (focusMode.active && focusMode.paused) {
-    const pausedDuration = Date.now() - focusMode.pausedAt;
-    focusMode.totalPausedTime += pausedDuration;
-    focusMode.paused = false;
-    focusMode.pausedAt = null;
-    
-    // Save state to storage
-    await storage.set({ focusModeState: focusMode });
-    
-    // Update remaining time
-    updateFocusModeState();
+  const data = await storage.get(['focusModeState']);
+  const focusModeState = data.focusModeState;
+  if (focusModeState && focusModeState.active && focusModeState.paused) {
+    const pausedDuration = Date.now() - focusModeState.pausedAt;
+    focusModeState.totalPausedTime += pausedDuration;
+    focusModeState.paused = false;
+    focusModeState.pausedAt = null;
+
+    await storage.set({ focusModeState });
+
     // Calculate remaining time
-    const elapsed = Date.now() - focusMode.startTime - focusMode.totalPausedTime;
-    const remaining = Math.max(0, focusMode.duration - elapsed);
-    
+    const elapsed = Date.now() - focusModeState.startTime - focusModeState.totalPausedTime;
+    const remaining = Math.max(0, focusModeState.duration - elapsed);
+
     if (remaining > 0) {
       // Set new alarm for remaining time
       chrome.alarms.create('focusMode', { delayInMinutes: remaining / (60 * 1000) });
-      
-      // Update badge
+      chrome.alarms.create('focusTick', { periodInMinutes: 1 });
+
       chrome.action.setBadgeText({ text: 'FOCUS' });
       chrome.action.setBadgeBackgroundColor({ color: '#ff4444' });
     } else {
-      // Time's up
-      handleEndFocusMode();
+      await handleEndFocusMode();
     }
-    
+
     console.log('Focus mode resumed');
   }
 }
 
 // Handle end focus mode
 async function handleEndFocusMode() {
-  if (focusMode.active) {
-    const sessionDuration = Date.now() - focusMode.startTime - focusMode.totalPausedTime;
-    const completed = sessionDuration >= focusMode.duration;
-    
-    focusMode.active = false;
-    
-    // Clear interval timer
-    if(focusModeInterval) {
-      clearInterval(focusModeInterval);
-      focusModeInterval = null;
-    }
+  const data = await storage.get(['focusModeState']);
+  const focusModeState = data.focusModeState;
+  if (focusModeState && focusModeState.active) {
+    const sessionDuration = Date.now() - focusModeState.startTime - focusModeState.totalPausedTime;
+    const completed = sessionDuration >= focusModeState.duration;
+
     // Clear from storage
     await storage.remove(['focusModeState']);
-        
+
     // Disable site blocking
     await disableSiteBlocking();
-    
-    // Clear alarm
+
+    // Clear all focus alarms
     chrome.alarms.clear('focusMode');
-    
+    chrome.alarms.clear('focusTick');
+
     // Update badge
     chrome.action.setBadgeText({ text: '' });
-    
+
     // Update stats
     if (completed) {
       await updatePerformanceStats('focusSessionsCompleted');
       await updatePerformanceStats('totalFocusTime', Math.round(sessionDuration / 1000));
     }
-    
+
     if (userSettings.enableNotifications) {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'icon-48.png',
+        iconUrl: 'icons/icon128.png',
         title: completed ? 'Focus Session Completed!' : 'Focus Session Ended',
         message: completed ? 'Congratulations! You completed your focus session.' : 'Focus session was ended early.'
       });
     }
-    
+
     console.log('Focus mode ended:', { completed, duration: sessionDuration });
   }
 }
@@ -961,7 +1006,7 @@ async function addToFocusBlacklist(url) {
       if (userSettings.enableNotifications) {
         chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'icon-48.png',
+          iconUrl: 'icons/icon48.png',
           title: 'Site Added to Blacklist',
           message: `${domain} will be blocked during focus mode.`
         });
@@ -1005,7 +1050,7 @@ async function removeFromFocusBlacklist(domain) {
       if (userSettings.enableNotifications) {
         chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'icon-48.png',
+          iconUrl: 'icons/icon48.png',
           title: 'Site Removed from Blacklist',
           message: `${domain} is no longer blocked during focus mode.`
         });
@@ -1059,24 +1104,8 @@ async function addActivity(icon, text) {
   }
 }
 
-// Memory cleanup - run periodically
-setInterval(async () => {
-  try {
-    // Clean up old activities
-    const data = await storage.get(['recentActivities']);
-    const activities = data.recentActivities || [];
-    
-    if (activities.length > 100) {
-      activities.splice(100);
-      await storage.set({ recentActivities: activities });
-    }
-    
-    // Clean up old performance stats if needed
-    // Could add more cleanup logic here
-  } catch (error) {
-    console.error('Memory cleanup failed:', error);
-  }
-}, 300000); // Run every 5 minutes
+// Memory cleanup - handled via alarm instead of setInterval
+chrome.alarms.create('memoryCleanup', { periodInMinutes: 5 });
 
 // Handle notification clicks
 chrome.notifications.onClicked.addListener((notificationId) => {
@@ -1093,17 +1122,19 @@ chrome.action.onClicked.addListener((tab) => {
 // Handle keyboard shortcuts
 chrome.commands.onCommand.addListener(async (command) => {
   switch (command) {
-    case 'toggle-focus-mode':
-      if (focusMode.active) {
+    case 'toggle-focus-mode': {
+      const state = await getFocusModeState();
+      if (state.active) {
         await handleEndFocusMode();
       } else {
         await handleStartFocusMode(25 * 60); // 25 minutes default
       }
       break;
-    case 'group-tabs':
+    }
+    case 'group-similar-tabs':
       await groupSimilarTabs();
       break;
-    case 'close-duplicates':
+    case 'cleanup-tabs':
       await closeDuplicateTabs();
       break;
   }
@@ -1111,9 +1142,11 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 // Monitor system idle state
 chrome.idle.onStateChanged.addListener(async (state) => {
-  if (state === 'idle' && focusMode.active) {
-    // Optionally pause focus mode when idle
-    console.log('System is idle during focus mode');
+  if (state === 'idle') {
+    const focusState = await getFocusModeState();
+    if (focusState.active) {
+      console.log('System is idle during focus mode');
+    }
   }
 });
 

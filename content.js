@@ -12,6 +12,23 @@ let pageAnalytics = {
   startTime: Date.now()
 };
 
+// Resilient message sender - handles service worker being asleep
+async function safeSendMessage(message) {
+  try {
+    return await chrome.runtime.sendMessage(message);
+  } catch (error) {
+    // Service worker may be inactive - message will wake it but first attempt can fail
+    // Retry once after a short delay
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return await chrome.runtime.sendMessage(message);
+    } catch (retryError) {
+      console.warn('Failed to send message to background:', retryError.message);
+      return null;
+    }
+  }
+}
+
 // Initialize content script
 (function() {
   'use strict';
@@ -41,7 +58,7 @@ let pageAnalytics = {
 async function initializeContentScript() {
   try {
     // Check if focus mode is active
-    const response = await chrome.runtime.sendMessage({ action: 'getFocusStatus' });
+    const response = await safeSendMessage({ action: 'getFocusStatus' });
     if (response && response.active) {
       focusModeActive = true;
       await checkFocusMode();
@@ -200,7 +217,7 @@ function showFocusBlockedOverlay() {
   
   // Add event listeners
   document.getElementById('focusEndButton').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'endFocusMode' });
+    safeSendMessage({ action: 'endFocusMode' });
     removeFocusOverlay();
   });
   
@@ -317,7 +334,7 @@ function setupPageMonitoring() {
     pageAnalytics.timeSpent += Date.now() - pageAnalytics.startTime;
     
     // Send analytics to background script
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: 'updatePageAnalytics',
       data: {
         url: window.location.href,
@@ -350,19 +367,19 @@ function setupKeyboardShortcuts() {
     // Alt + F - Toggle focus mode
     if (event.altKey && event.key === 'f') {
       event.preventDefault();
-      chrome.runtime.sendMessage({ action: 'toggleFocusMode' });
+      safeSendMessage({ action: 'toggleFocusMode' });
     }
-    
+
     // Alt + G - Group similar tabs
     if (event.altKey && event.key === 'g') {
       event.preventDefault();
-      chrome.runtime.sendMessage({ action: 'groupSimilarTabs' });
+      safeSendMessage({ action: 'groupSimilarTabs' });
     }
-    
+
     // Alt + D - Close duplicates
     if (event.altKey && event.key === 'd') {
       event.preventDefault();
-      chrome.runtime.sendMessage({ action: 'closeDuplicates' });
+      safeSendMessage({ action: 'closeDuplicates' });
     }
     
     // Track keyboard interactions
@@ -393,7 +410,7 @@ function setupInteractionTracking() {
 // Track page load
 function trackPageLoad() {
   const loadTime = performance.now();
-  chrome.runtime.sendMessage({
+  safeSendMessage({
     action: 'trackPageLoad',
     data: {
       url: window.location.href,
@@ -539,7 +556,7 @@ function monitorNewTabs() {
   // Override window.open
   const originalOpen = window.open;
   window.open = function(...args) {
-    chrome.runtime.sendMessage({
+    safeSendMessage({
       action: 'newTabOpened',
       data: {
         url: args[0],
@@ -559,7 +576,7 @@ function monitorNewTabs() {
       const opensNewTab = link.target === '_blank' || event.ctrlKey || event.metaKey;
       
       if (isExternal || opensNewTab) {
-        chrome.runtime.sendMessage({
+        safeSendMessage({
           action: 'linkClicked',
           data: {
             url: link.href,
@@ -581,7 +598,7 @@ function addPerformanceMonitoring() {
     const observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         if (entry.duration > 50) { // Tasks longer than 50ms
-          chrome.runtime.sendMessage({
+          safeSendMessage({
             action: 'longTaskDetected',
             data: {
               duration: entry.duration,
@@ -599,7 +616,7 @@ function addPerformanceMonitoring() {
   // Monitor memory usage
   if (performance.memory) {
     setInterval(() => {
-      chrome.runtime.sendMessage({
+      safeSendMessage({
         action: 'memoryUsage',
         data: {
           usedJSHeapSize: performance.memory.usedJSHeapSize,
