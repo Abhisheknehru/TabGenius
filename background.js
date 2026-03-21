@@ -42,14 +42,26 @@ async function getFocusModeState() {
   return focusMode;
 }
 
-let userSettings = {
+const DEFAULT_USER_SETTINGS = {
   enableNotifications: true,
   autoGroupTabs: true,
+  autoPinEnabled: true,
   focusModeEnabled: false,
   autoCleanup: false,
   cleanupTime: 2,
   theme: 'light'
 };
+
+// In-memory cache - always reloaded from storage on service worker wake
+let userSettings = { ...DEFAULT_USER_SETTINGS };
+
+// Load settings from storage (called on every wake)
+async function loadUserSettings() {
+  const data = await storage.get(['userSettings']);
+  if (data.userSettings) {
+    userSettings = { ...DEFAULT_USER_SETTINGS, ...data.userSettings };
+  }
+}
 
 // Default blocked sites for focus mode
 const DEFAULT_BLOCKED_SITES = [
@@ -86,11 +98,8 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 // Initialize extension
 async function initializeExtension() {
   try {
-    // Load user settings
-    const settings = await storage.get(['userSettings']);
-    if (settings.userSettings) {
-      userSettings = { ...userSettings, ...settings.userSettings };
-    }
+    // Load user settings from storage
+    await loadUserSettings();
 
     // Initialize blocked sites if not exists
     const blockedSites = await storage.get(['blockedSites']);
@@ -290,7 +299,67 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 });
 
-// Group similar tabs
+// Domain-to-category mapping for color-coded grouping
+const DOMAIN_CATEGORIES = {
+  'Social Media': {
+    color: 'red',
+    domains: ['facebook.com', 'twitter.com', 'x.com', 'instagram.com', 'linkedin.com',
+              'snapchat.com', 'pinterest.com', 'threads.net', 'mastodon.social']
+  },
+  'Development': {
+    color: 'blue',
+    domains: ['github.com', 'gitlab.com', 'stackoverflow.com', 'codepen.io',
+              'developer.mozilla.org', 'npmjs.com', 'pypi.org', 'bitbucket.org',
+              'vercel.com', 'netlify.com', 'heroku.com', 'replit.com']
+  },
+  'Entertainment': {
+    color: 'purple',
+    domains: ['youtube.com', 'netflix.com', 'twitch.tv', 'spotify.com', 'hulu.com',
+              'disneyplus.com', 'hbo.com', 'crunchyroll.com', 'soundcloud.com',
+              'music.apple.com', 'primevideo.com', 'vimeo.com']
+  },
+  'News': {
+    color: 'cyan',
+    domains: ['news.google.com', 'cnn.com', 'bbc.com', 'reuters.com', 'nytimes.com',
+              'theguardian.com', 'washingtonpost.com', 'apnews.com', 'aljazeera.com']
+  },
+  'Productivity': {
+    color: 'green',
+    domains: ['gmail.com', 'mail.google.com', 'docs.google.com', 'drive.google.com',
+              'sheets.google.com', 'slides.google.com', 'trello.com', 'notion.so',
+              'asana.com', 'slack.com', 'zoom.us', 'teams.microsoft.com',
+              'calendar.google.com', 'outlook.com', 'figma.com', 'miro.com']
+  },
+  'Shopping': {
+    color: 'orange',
+    domains: ['amazon.com', 'ebay.com', 'etsy.com', 'walmart.com', 'flipkart.com',
+              'aliexpress.com', 'target.com', 'bestbuy.com']
+  },
+  'Gaming': {
+    color: 'pink',
+    domains: ['steam.com', 'steampowered.com', 'epicgames.com', 'roblox.com',
+              'minecraft.net', 'ign.com', 'gamespot.com', 'twitch.tv',
+              'xbox.com', 'playstation.com', 'pcgamer.com']
+  },
+  'Education': {
+    color: 'yellow',
+    domains: ['wikipedia.org', 'coursera.org', 'udemy.com', 'edx.org', 'khanacademy.org',
+              'medium.com', 'dev.to', 'hashnode.com', 'freecodecamp.org',
+              'w3schools.com', 'geeksforgeeks.org', 'leetcode.com']
+  }
+};
+
+// Get category and color for a domain
+function getCategoryForDomain(hostname) {
+  for (const [category, info] of Object.entries(DOMAIN_CATEGORIES)) {
+    if (info.domains.some(d => hostname.includes(d) || hostname.endsWith(d))) {
+      return { category, color: info.color };
+    }
+  }
+  return { category: null, color: 'grey' };
+}
+
+// Group similar tabs with category-based colors
 async function groupSimilarTabs() {
   try {
     const tabs = await chrome.tabs.query({ currentWindow: true });
@@ -315,7 +384,12 @@ async function groupSimilarTabs() {
       if (domainTabs.length > 1) {
         const tabIds = domainTabs.map(tab => tab.id);
         const group = await chrome.tabs.group({ tabIds });
-        await chrome.tabGroups.update(group, { title: domain });
+
+        // Get category-based color
+        const { category, color } = getCategoryForDomain(domain);
+        const title = category || domain.replace('www.', '');
+
+        await chrome.tabGroups.update(group, { title, color });
         groupedCount += domainTabs.length;
       }
     }
@@ -325,7 +399,7 @@ async function groupSimilarTabs() {
         type: 'basic',
         iconUrl: 'icons/icon48.png',
         title: 'Tabs Grouped',
-        message: `Grouped ${groupedCount} tabs by domain.`
+        message: `Grouped ${groupedCount} tabs by category.`
       });
     }
   } catch (error) {
@@ -460,7 +534,7 @@ function setupTabMonitoring() {
   // Monitor tab creation
   chrome.tabs.onCreated.addListener(async (tab) => {
     await updatePerformanceStats('tabsOpened');
-    
+
     // Auto-group if enabled
     if (userSettings.autoGroupTabs) {
       setTimeout(async () => {
@@ -476,10 +550,82 @@ function setupTabMonitoring() {
 
   // Monitor tab updates
   chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete' && userSettings.autoGroupTabs) {
-      await autoGroupNewTab(tab);
+    if (changeInfo.status === 'complete') {
+      if (userSettings.autoGroupTabs) {
+        await autoGroupNewTab(tab);
+      }
+      // Track tab usage for auto-pinning
+      if (tab.url) {
+        await trackTabUsage(tab.url);
+      }
     }
   });
+
+  // Track tab activation for usage stats
+  chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    try {
+      const tab = await chrome.tabs.get(activeInfo.tabId);
+      if (tab.url) {
+        await trackTabUsage(tab.url);
+      }
+    } catch (e) {
+      // Tab may have been closed
+    }
+  });
+
+  // Set up auto-pin alarm (every 30 minutes)
+  chrome.alarms.create('autoPin', { periodInMinutes: 30 });
+}
+
+// Track tab usage for auto-pinning
+async function trackTabUsage(url) {
+  try {
+    const domain = new URL(url).hostname;
+    if (!domain) return;
+    const data = await storage.get(['tabUsageStats']);
+    const usageStats = data.tabUsageStats || {};
+
+    if (!usageStats[domain]) {
+      usageStats[domain] = { totalVisits: 0, lastVisit: 0 };
+    }
+
+    usageStats[domain].totalVisits += 1;
+    usageStats[domain].lastVisit = Date.now();
+
+    await storage.set({ tabUsageStats: usageStats });
+  } catch (e) {
+    // Skip invalid URLs
+  }
+}
+
+// Auto-pin most used tabs
+async function autoPinMostUsedTabs() {
+  try {
+    if (!userSettings.autoPinEnabled) return;
+
+    const data = await storage.get(['tabUsageStats']);
+    const usageStats = data.tabUsageStats || {};
+    const tabs = await chrome.tabs.query({});
+
+    const sortedDomains = Object.entries(usageStats)
+      .sort((a, b) => b[1].totalVisits - a[1].totalVisits)
+      .slice(0, 5);
+
+    for (const [domain, stats] of sortedDomains) {
+      if (stats.totalVisits < 10) continue;
+      const matchingTab = tabs.find(tab => {
+        try {
+          return new URL(tab.url).hostname === domain && !tab.pinned;
+        } catch { return false; }
+      });
+      if (matchingTab) {
+        await chrome.tabs.update(matchingTab.id, { pinned: true });
+        await addActivity('📌', `Auto-pinned ${domain} (${stats.totalVisits} visits)`);
+      }
+    }
+  } catch (error) {
+    console.error('Auto-pinning failed:', error);
+  }
 }
 
 // Auto-group new tab
@@ -507,11 +653,14 @@ async function autoGroupNewTab(tab) {
         // Add to existing group
         await chrome.tabs.group({ tabIds: [tab.id], groupId: existingGroup.groupId });
       } else {
-        // Create new group
+        // Create new group with category color
         const allDomainTabs = [...sameDomainTabs, tab];
         const tabIds = allDomainTabs.map(t => t.id);
         const group = await chrome.tabs.group({ tabIds });
-        await chrome.tabGroups.update(group, { title: domain });
+
+        const { category, color } = getCategoryForDomain(domain);
+        const title = category || domain.replace('www.', '');
+        await chrome.tabGroups.update(group, { title, color });
       }
     }
   } catch (error) {
@@ -559,6 +708,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   } else if (alarm.name === 'focusTick') {
     // Periodic check - recompute state to detect expiration
     await getFocusModeState();
+  } else if (alarm.name === 'autoPin') {
+    await autoPinMostUsedTabs();
   } else if (alarm.name === 'memoryCleanup') {
     // Clean up old activities
     try {

@@ -225,11 +225,32 @@
         }
         
         function goBack() {
-            if (window.history.length > 1) {
-                window.history.back();
-            } else {
-                window.close();
+            // The declarativeNetRequest redirect replaces history,
+            // so history.back() would just redirect to the blocked site again.
+            // Instead, navigate to a safe page or close the tab.
+
+            // Try to find the previous non-blocked page via the referrer
+            if (document.referrer) {
+                // Check if referrer is also a blocked site
+                const blockedDomains = [
+                    'youtube.com', 'facebook.com', 'twitter.com', 'x.com',
+                    'instagram.com', 'reddit.com', 'netflix.com', 'tiktok.com',
+                    'twitch.tv', 'discord.com', 'whatsapp.com'
+                ];
+                try {
+                    const referrerHost = new URL(document.referrer).hostname;
+                    const isBlocked = blockedDomains.some(d => referrerHost.includes(d));
+                    if (!isBlocked) {
+                        window.location.href = document.referrer;
+                        return;
+                    }
+                } catch (e) { /* ignore */ }
             }
+
+            // Navigate to new tab page
+            // chrome.tabs API is not available in web_accessible_resources pages,
+            // so we use direct navigation instead.
+            window.location.href = 'about:newtab';
         }
         
         function openFocusPanel() {
