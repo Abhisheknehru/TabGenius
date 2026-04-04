@@ -1,3 +1,4 @@
+
 name: GitHub Snake Game
 
 
@@ -23,7 +24,7 @@ on:
 
       - main
 
-
+permissions: write-all
 jobs:
 
   generate:
