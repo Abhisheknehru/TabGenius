@@ -162,3 +162,6 @@ Known Issues
 View Switching: If buttons don’t respond, check Console for View or button not found.
 Timer: If #focus-timer stays empty, verify startFocus called in Console.
 Tabs: If #tab-list shows “Loading tabs...” or nothing, check background Console for Error querying tabs.
+
+
+![snake gif](https://github.com/Abhisheknehru/Abhisheknehru/blob/output/github-snake-dark.svg)
