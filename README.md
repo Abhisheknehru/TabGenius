@@ -22,9 +22,9 @@ TabGenius is a lightweight Chrome extension that helps you manage browser tabs a
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="assets/dashboard.png" width="45%" alt="Dashboard View" />
+  <img src="assets/tabgenius1.png" width="45%" alt="Dashboard View" />
   &nbsp;&nbsp;
-  <img src="assets/focus-mode.png" width="45%" alt="Focus Mode" />
+  <img src="assets/tabgenius2.png" width="45%" alt="Focus Mode" />
 </p>
 <p align="center">
   <em>Dashboard View &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Focus Mode</em>
