@@ -37,7 +37,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 const storage = {
   get: (keys) => new Promise(resolve => chrome.storage.local.get(keys, resolve)),
   set: (items) => new Promise(resolve => chrome.storage.local.set(items, resolve)),
-  remove: (keys) => new Promise(resolve => chrome.storage.local.remove(keys, resolve))
+  remove: (keys) => new Promise(resolve => chrome.storage.local.remove(keys, resolve)),
+  clear: async () => {
+    const response = await chrome.runtime.sendMessage({ action: 'clearAllData' });
+    if (!response?.success) throw new Error(response?.error || 'Could not clear data.');
+  }
 };
 
 // Navigation functionality
@@ -337,14 +341,17 @@ function initializeFocusMode() {
         await new Promise((resolve, reject) => {
           chrome.runtime.sendMessage({
             action: 'startFocusMode',
-            duration: originalTime
+            duration: originalTime,
+            projectId: document.getElementById('focusProject').value || null,
+            task: document.getElementById('focusTask').value.trim()
           }, (response) => {
             if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+            else if (!response?.success) reject(new Error(response?.error || 'Could not start focus session.'));
             else resolve(response);
           });
         });
       } catch (error) {
-        console.log('Background script communication failed:', error);
+        throw error;
       }
 
       // Start local UI timer (display only - background owns the real timer)
@@ -355,6 +362,7 @@ function initializeFocusMode() {
     } catch (error) {
       console.error('Failed to start focus session:', error);
       resetFocusUI();
+      showActionResult('❌', error.message);
     }
   }
 
@@ -384,6 +392,9 @@ function initializeFocusMode() {
               const elapsed = currentTime - response.startTime - response.totalPausedTime;
               const remaining = Math.max(0, Math.floor((response.duration - elapsed) / 1000));
               timeLeft = remaining;
+            } else if (response && !response.active) {
+              await endFocusSession(false);
+              return;
             }
           } catch (error) {
             // If sync fails, just decrement local timer
@@ -470,6 +481,7 @@ function initializeFocusMode() {
   function resetFocusUI() {
     isActive = false;
     isPaused = false;
+    if (focusTimer) { clearInterval(focusTimer); focusTimer = null; }
     focusBtn.textContent = 'Start Focus Session';
     focusBtn.disabled = false;
     pauseBtn.style.display = 'none';
@@ -1673,29 +1685,29 @@ function initializeSettings() {
     return {
       enableNotifications: settings.enableNotifications?.checked || false,
       enableSoundNotifications: settings.enableSoundNotifications?.checked || false,
-      showTabCount: settings.showTabCount?.checked || true,
-      tabLimitWarning: settings.tabLimitWarning?.checked || true,
+      showTabCount: settings.showTabCount?.checked ?? true,
+      tabLimitWarning: settings.tabLimitWarning?.checked ?? true,
       maxTabsLimit: parseInt(maxTabsLimitInput?.value || '50'),
       autoGroupTabs: settings.autoGroupTabs?.checked || false,
-      autoGroupEnabled: settings.autoGroupEnabled?.checked || true,
-      autoPinEnabled: settings.autoPinEnabled?.checked || true,
+      autoGroupEnabled: settings.autoGroupEnabled?.checked ?? true,
+      autoPinEnabled: settings.autoPinEnabled?.checked ?? true,
       autoCleanup: settings.autoCleanup?.checked || false,
       autoSuspendTabs: settings.autoSuspendTabs?.checked || false,
       cleanupTime: parseInt(cleanupTimeSlider?.value || '2'),
-      cleanupDuplicates: settings.cleanupDuplicates?.checked || true,
-      cleanupEmptyGroups: settings.cleanupEmptyGroups?.checked || true,
+      cleanupDuplicates: settings.cleanupDuplicates?.checked ?? true,
+      cleanupEmptyGroups: settings.cleanupEmptyGroups?.checked ?? true,
       focusModeEnabled: settings.focusModeEnabled?.checked || false,
       defaultFocusDuration: parseInt(defaultFocusDurationSlider?.value || '25'),
       autoBlockDistractions: settings.autoBlockDistractions?.checked || false,
       maxTabsPerGroup: parseInt(maxTabsPerGroupInput?.value || '10'),
-      groupByDomain: settings.groupByDomain?.checked || true,
-      groupByTitle: settings.groupByTitle?.checked || true,
+      groupByDomain: settings.groupByDomain?.checked ?? true,
+      groupByTitle: settings.groupByTitle?.checked ?? true,
       theme: document.querySelector('input[name="theme"]:checked')?.value || 'light',
       compactMode: settings.compactMode?.checked || false,
-      showAnimations: settings.showAnimations?.checked || true,
-      trackBrowsingHistory: settings.trackBrowsingHistory?.checked || true,
+      showAnimations: settings.showAnimations?.checked ?? true,
+      trackBrowsingHistory: settings.trackBrowsingHistory?.checked ?? true,
       enableAnalytics: settings.enableAnalytics?.checked || false,
-      memoryOptimization: settings.memoryOptimization?.checked || true
+      memoryOptimization: settings.memoryOptimization?.checked ?? true
     };
   }
 
@@ -2354,8 +2366,11 @@ async function initializeAutoCleanup() {
 }
 
 // Context menu integration
-chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
-  if (request.action === 'contextMenuAction') {
+// Keep this listener synchronous: an async listener also responds to unrelated
+// requests with null in Chrome, stealing replies from the background worker.
+chrome.runtime.onMessage.addListener((request) => {
+  if (request.action !== 'contextMenuAction') return;
+  (async () => {
     switch (request.menuItemId) {
       case 'addToFocusBlacklist':
         if (request.url) {
@@ -2381,7 +2396,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
         await analyzeCurrentTab();
         break;
     }
-  }
+  })().catch(error => console.error('Context menu action failed:', error));
 });
 
 async function analyzeCurrentTab() {

@@ -1,9 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Smart Tab Manager",
-  "version": "1.0.0",
-  "description": "Intelligent tab management with auto-pinning, grouping, summarization, and cleanup features",
-  
+  "name": "TabGenius \u2014 Research Workspaces",
+  "version": "1.1.0",
+  "description": "Keep research papers, repositories, documentation, and notes together. Restore project tabs and track task-focused work.",
   "permissions": [
     "tabs",
     "tabGroups",
@@ -18,26 +17,26 @@
     "idle",
     "alarms"
   ],
-  
   "host_permissions": [
     "<all_urls>"
   ],
-  
   "background": {
     "service_worker": "background.js"
   },
-  
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
     }
   ],
-  
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Smart Tab Manager",
+    "default_title": "TabGenius \u2014 Research Workspaces",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -45,16 +44,13 @@
       "128": "icons/icon128.png"
     }
   },
-  
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  
   "options_page": "options.html",
-  
   "commands": {
     "toggle-focus-mode": {
       "suggested_key": {
@@ -78,14 +74,17 @@
       "description": "Cleanup duplicate tabs"
     }
   },
-  
   "web_accessible_resources": [
     {
-      "resources": ["blocked.html", "icons/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "blocked.html",
+        "icons/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
-  
   "declarative_net_request": {
     "rule_resources": [
       {

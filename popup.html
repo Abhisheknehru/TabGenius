@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TabGenius</title>
     <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="research.css">
 </head>
 <body>
     <div class="container">
@@ -31,9 +32,12 @@
 
         <!-- Navigation Tabs -->
         <nav class="nav-tabs">
-            <button class="nav-tab active" data-tab="dashboard">
+            <button class="nav-tab active" data-tab="research">
+                <span class="tab-icon">📚</span><span class="tab-label">Research</span>
+            </button>
+            <button class="nav-tab" data-tab="dashboard">
                 <span class="tab-icon">📊</span>
-                <span class="tab-label">Dashboard</span>
+                <span class="tab-label">Overview</span>
             </button>
             <button class="nav-tab" data-tab="focus">
                 <span class="tab-icon">🎯</span>
@@ -45,14 +49,72 @@
             </button>
             <button class="nav-tab" data-tab="ai">
                 <span class="tab-icon">🤖</span>
-                <span class="tab-label">AI</span>
+                <span class="tab-label">Insights</span>
             </button>
         </nav>
 
         <!-- Tab Content -->
         <main class="tab-content">
             <!-- Dashboard Tab -->
-            <div class="tab-pane active" id="dashboard">
+            <section class="tab-pane active" id="research" aria-label="Research projects">
+                <div class="research-intro">
+                    <h2>Your research, ready to resume</h2>
+                    <p class="research-muted">Keep papers, code, documentation, and notes together for each project.</p>
+                </div>
+                <form id="createWorkspace">
+                    <label for="newWorkspaceName">New project
+                        <input id="newWorkspaceName" maxlength="100" placeholder="e.g. VLA literature review" required>
+                    </label>
+                    <button class="research-primary" type="submit">Create</button>
+                </form>
+                <label for="workspaceSelect">Open project</label>
+                <select id="workspaceSelect" disabled></select>
+                <p id="researchStatus" role="status" aria-live="polite"></p>
+                <p id="researchEmpty" class="research-muted">Create your first project, then save the tabs you want to return to.</p>
+                <div id="workspaceActions" hidden>
+                    <form id="workspaceForm">
+                        <label for="workspaceName">Project name</label>
+                        <input id="workspaceName" maxlength="100" required>
+                        <p id="workspaceMeta" class="research-muted"></p>
+                        <label for="workspaceNotes">Research notes &amp; next steps</label>
+                        <textarea id="workspaceNotes" rows="4" maxlength="10000" placeholder="What are you investigating? What should you try next?"></textarea>
+                        <div class="research-row"><button type="submit" class="research-primary">Save notes</button></div>
+                    </form>
+                    <div class="research-row">
+                        <button id="restoreWorkspace" type="button" class="research-primary">Restore in new window</button>
+                        <button id="exportWorkspace" type="button">Export Markdown</button>
+                    </div>
+                    <details class="research-panel" open>
+                        <summary id="openTabCount">Choose tabs from this window</summary>
+                        <div class="research-row">
+                            <button id="refreshResearchTabs" type="button">Refresh tabs</button>
+                            <button id="selectResearchTabs" type="button">Select / clear all</button>
+                        </div>
+                        <div id="researchOpenTabs"></div>
+                        <div class="research-row">
+                            <button id="saveResearchTabs" type="button" class="research-primary">Add selected tabs</button>
+                            <button id="replaceResearchTabs" type="button">Replace saved tabs</button>
+                        </div>
+                        <p class="research-muted">Saves web URLs, titles, pins, and groups. Private tabs are excluded. Page contents and unsaved forms are not captured.</p>
+                    </details>
+                    <h3>Saved sources</h3>
+                    <div class="research-filter">
+                        <input id="sourceSearch" type="search" placeholder="Search titles, URLs, notes" aria-label="Search saved sources">
+                        <select id="sourceType" aria-label="Filter source type">
+                            <option value="">All types</option><option>Paper</option><option>Repository</option><option>Documentation</option><option>Other</option>
+                        </select>
+                    </div>
+                    <div id="researchSources"></div>
+                    <section class="research-panel" aria-label="Recent project focus sessions">
+                        <h3>Recent focus sessions</h3>
+                        <p id="researchSessionEmpty" class="research-muted">Choose this project in Focus to track your work here.</p>
+                        <ul id="researchSessions"></ul>
+                    </section>
+                    <button id="deleteWorkspace" type="button" class="research-danger">Delete project</button>
+                </div>
+                <p class="research-privacy">Projects and notes stay in this browser profile. Export Markdown to keep a portable copy.</p>
+            </section>
+            <div class="tab-pane" id="dashboard">
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-number" id="totalTabs">0</div>
@@ -103,6 +165,12 @@
                         <h2>Focus Mode</h2>
                         <div class="timer-display" id="timerDisplay">25:00</div>
                     </div>
+                    <div class="focus-project-fields">
+                        <label for="focusProject">Research project</label>
+                        <select id="focusProject"><option value="">No project</option></select>
+                        <label for="focusTask">What are you working on?</label>
+                        <input id="focusTask" maxlength="200" placeholder="e.g. Compare three imitation learning papers">
+                    </div>
                     <button class="focus-btn" id="focusBtn">
                         <span class="focus-icon">🎯</span>
                         Start Focus Session
@@ -126,16 +194,16 @@
                     <h3>Today's Focus</h3>
                     <div class="focus-stats-grid">
                         <div class="focus-stat">
-                            <div class="focus-stat-number">3</div>
+                            <div class="focus-stat-number" id="todayFocusSessions">0</div>
                             <div class="focus-stat-label">Sessions</div>
                         </div>
                         <div class="focus-stat">
-                            <div class="focus-stat-number">75</div>
+                            <div class="focus-stat-number" id="todayFocusMinutes">0</div>
                             <div class="focus-stat-label">Minutes</div>
                         </div>
                         <div class="focus-stat">
-                            <div class="focus-stat-number">12</div>
-                            <div class="focus-stat-label">Streak</div>
+                            <div class="focus-stat-number" id="todayFocusProjects">0</div>
+                            <div class="focus-stat-label">Projects</div>
                         </div>
                     </div>
                 </div>
@@ -210,10 +278,11 @@
             <!-- AI Tab -->
             <div class="tab-pane" id="ai">
                 <div class="ai-section">
-                    <h2>AI Assistant</h2>
+                    <h2>Smart Insights</h2>
+                    <p class="research-muted">Local tab statistics and rule-based suggestions.</p>
                     <div class="ai-input-container">
-                        <textarea id="aiInput" placeholder="Ask about your tabs, get summaries, or analyze your browsing patterns..." rows="3"></textarea>
-                        <button class="ai-btn" id="aiBtn">Ask AI</button>
+                        <textarea id="aiInput" placeholder="Find duplicates, summarize tab counts, or analyze domains…" rows="3"></textarea>
+                        <button class="ai-btn" id="aiBtn">Analyze tabs</button>
                     </div>
                     <div class="ai-response" id="aiResponse" style="display: none;">
                         <div class="ai-response-text"></div>
@@ -622,6 +691,8 @@
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
+    <script src="research-core.js"></script>
+    <script src="research.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

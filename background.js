@@ -1,3 +1,5 @@
+importScripts('research-core.js', 'research-background.js');
+
 // Smart Tab Manager - Background Script (Service Worker)
 // This handles all background processes, Chrome API events, and persistent functionality
 
@@ -58,9 +60,7 @@ let userSettings = { ...DEFAULT_USER_SETTINGS };
 // Load settings from storage (called on every wake)
 async function loadUserSettings() {
   const data = await storage.get(['userSettings']);
-  if (data.userSettings) {
-    userSettings = { ...DEFAULT_USER_SETTINGS, ...data.userSettings };
-  }
+  userSettings = { ...DEFAULT_USER_SETTINGS, ...(data.userSettings || {}) };
 }
 
 // Default blocked sites for focus mode
@@ -117,7 +117,7 @@ async function initializeExtension() {
     }
 
     // Setup tab monitoring
-    setupTabMonitoring();
+    // Tab listeners register at script load below.
 
     console.log('Smart Tab Manager initialized successfully');
   } catch (error) {
@@ -533,6 +533,7 @@ async function bookmarkCurrentSession() {
 function setupTabMonitoring() {
   // Monitor tab creation
   chrome.tabs.onCreated.addListener(async (tab) => {
+    await loadUserSettings();
     await updatePerformanceStats('tabsOpened');
 
     // Auto-group if enabled
@@ -550,6 +551,7 @@ function setupTabMonitoring() {
 
   // Monitor tab updates
   chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    await loadUserSettings();
     if (changeInfo.status === 'complete') {
       if (userSettings.autoGroupTabs) {
         await autoGroupNewTab(tab);
@@ -563,6 +565,7 @@ function setupTabMonitoring() {
 
   // Track tab activation for usage stats
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    await loadUserSettings();
     try {
       const tab = await chrome.tabs.get(activeInfo.tabId);
       if (tab.url) {
@@ -576,6 +579,8 @@ function setupTabMonitoring() {
   // Set up auto-pin alarm (every 30 minutes)
   chrome.alarms.create('autoPin', { periodInMinutes: 30 });
 }
+
+setupTabMonitoring();
 
 // Track tab usage for auto-pinning
 async function trackTabUsage(url) {
@@ -630,6 +635,8 @@ async function autoPinMostUsedTabs() {
 
 // Auto-group new tab
 async function autoGroupNewTab(tab) {
+  const { researchRestoreWindows = [] } = await chrome.storage.session.get('researchRestoreWindows');
+  if (researchRestoreWindows.includes(tab.windowId)) return;
   try {
     if (!tab.url || tab.url.startsWith('chrome://')) return;
 
@@ -700,6 +707,7 @@ async function setupAutoCleanup() {
 
 // Handle alarms
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  await loadUserSettings();
   if (alarm.name === 'autoCleanup') {
     await performAutoCleanup();
   } else if (alarm.name === 'focusMode') {
@@ -763,9 +771,15 @@ async function performAutoCleanup() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Use async handler pattern to keep message channel open
   (async () => {
+    if (request.action?.startsWith('research:')) {
+      const result = await handleResearchRequest(request, sender);
+      sendResponse({ success: true, ...result });
+      return;
+    }
+    await loadUserSettings();
     switch (request.action) {
       case 'startFocusMode':
-        await handleStartFocusMode(request.duration);
+        await handleStartFocusMode(request.duration, request);
         sendResponse({ success: true });
         break;
       case 'pauseFocusMode':
@@ -790,6 +804,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
         break;
       }
+      case 'clearAllData':
+        if (!sender.url?.startsWith(chrome.runtime.getURL(''))) throw new Error('Open TabGenius settings to clear data.');
+        await handleEndFocusMode();
+        await disableSiteBlocking();
+        await chrome.alarms.clear('autoCleanup');
+        await chrome.storage.local.clear();
+        await chrome.storage.sync.clear();
+        await loadUserSettings();
+        sendResponse({ success: true });
+        break;
       case 'updateSettings':
         await handleUpdateSettings(request.settings);
         sendResponse({ success: true });
@@ -826,14 +850,33 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
         break;
     }
-  })();
+  })().catch(error => {
+    console.error('Request failed:', error);
+    sendResponse({ success: false, error: error.message });
+  });
   return true; // Keep channel open for async response
 });
 
 // Handle start focus mode
-async function handleStartFocusMode(duration) {
+let startingFocus = false;
+function handleStartFocusMode(duration, context = {}) {
+  if (startingFocus) return Promise.reject(new Error('A focus session is already starting.'));
+  startingFocus = true;
+  return startFocusModeSession(duration, context).finally(() => { startingFocus = false; });
+}
+async function startFocusModeSession(duration, context = {}) {
   try {
+    if (!Number.isFinite(duration) || duration < 60 || duration > 7200) throw new Error('Choose a focus duration between 1 and 120 minutes.');
+    const existing = await getFocusModeState();
+    if (existing.active) throw new Error('A focus session is already running.');
+    const research = await researchStore.read();
+    const project = context.projectId ? research.workspaces.find(w => w.id === context.projectId) : null;
+    if (context.projectId && !project) throw new Error('Choose an existing research project.');
     const focusModeState = {
+      id: crypto.randomUUID(),
+      projectId: project?.id || null,
+      projectName: project?.name || '',
+      task: String(context.task || '').trim().slice(0, 200),
       active: true,
       startTime: Date.now(),
       duration: duration * 1000, // Convert to milliseconds
@@ -870,6 +913,7 @@ async function handleStartFocusMode(duration) {
     console.log('Focus mode started');
   } catch (error) {
     console.error('Failed to start focus mode:', error);
+    throw error;
   }
 }
 
@@ -927,11 +971,17 @@ async function handleResumeFocusMode() {
 }
 
 // Handle end focus mode
-async function handleEndFocusMode() {
+let endingFocus = null;
+function handleEndFocusMode() {
+  if (!endingFocus) endingFocus = endFocusModeSession().finally(() => { endingFocus = null; });
+  return endingFocus;
+}
+async function endFocusModeSession() {
   const data = await storage.get(['focusModeState']);
   const focusModeState = data.focusModeState;
   if (focusModeState && focusModeState.active) {
-    const sessionDuration = Date.now() - focusModeState.startTime - focusModeState.totalPausedTime;
+    const elapsedUntil = focusModeState.paused ? focusModeState.pausedAt : Date.now();
+    const sessionDuration = Math.max(0, Math.min(focusModeState.duration, elapsedUntil - focusModeState.startTime - focusModeState.totalPausedTime));
     const completed = sessionDuration >= focusModeState.duration;
 
     // Clear from storage
@@ -946,6 +996,15 @@ async function handleEndFocusMode() {
 
     // Update badge
     chrome.action.setBadgeText({ text: '' });
+
+    await researchStore.recordSession({
+      id: focusModeState.id || `legacy-${focusModeState.startTime}`,
+      projectId: focusModeState.projectId || null,
+      projectName: focusModeState.projectName || '',
+      task: focusModeState.task || '',
+      startedAt: focusModeState.startTime,
+      endedAt: Date.now(), elapsedMs: sessionDuration, completed
+    });
 
     // Update stats
     if (completed) {

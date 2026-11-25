@@ -1,25 +1,29 @@
-![Header](https://capsule-render.vercel.app/api?type=waving&color=0:6C63FF,100:00F7FF&height=180&section=header&text=TabGenius&fontSize=50&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Smart%20Tab%20Manager%20for%20Chrome&descAlignY=55)
+# TabGenius — Research Workspaces
 
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=18&pause=1000&color=6C63FF&width=500&lines=Organize+your+tabs+intelligently;Focus+Mode+with+countdown+timer;Auto-group+and+pin+frequent+tabs;Built+with+Chrome+Manifest+V3" alt="Typing SVG" />
-</p>
+A Chrome Manifest V3 extension for keeping research papers, repositories, documentation, and notes together. Save a project's tabs, resume its sources in a new window, and track focused work against a specific task.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Chrome-Extension-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" />
-  <img src="https://img.shields.io/badge/Manifest-V3-FF6B6B?style=for-the-badge&logo=google&logoColor=white" />
-  <img src="https://img.shields.io/badge/JavaScript-ES6-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" />
-  <img src="https://img.shields.io/badge/License-MIT-22C55E?style=for-the-badge" />
-</p>
+## Install locally
 
----
+1. Download or clone this repository.
+2. Open `chrome://extensions` in Chrome.
+3. Enable **Developer mode**, choose **Load unpacked**, and select this folder (the one containing `manifest.json`).
+4. Pin TabGenius to the toolbar and open it.
 
-## 📌 What is TabGenius?
+After updating these files, click **Reload** on the TabGenius card at `chrome://extensions`, then reopen the popup. There is no build step or API key.
 
-TabGenius is a lightweight Chrome extension that helps you manage browser tabs and stay focused. It automatically pins frequently used tabs, groups tabs intelligently, and provides a distraction-free Focus Mode with a countdown timer.
+## Research workflow
 
----
+1. In **Research**, create a project such as “VLA literature review.”
+2. Choose tabs from the current window and click **Add selected tabs**. Duplicate URLs are merged; notes for existing sources are retained.
+3. Write research questions and next steps, then click **Save notes**. Each source also has its own notes and editable source type under **Notes & actions**. Click **Save source notes** to persist those edits.
+4. Search saved sources by title, URL, or notes, or filter by Paper, Repository, Documentation, or Other. Source types are inferred from URLs and can be corrected manually.
+5. In **Focus**, choose the project, enter a task, and start the timer. Project and task stay attached to the running session. Completed and interrupted sessions appear in project history; today's totals use this device's local date.
+6. Click **Restore in new window** to reopen saved URLs, pins, and groups without closing your current window. Restored windows are excluded from automatic grouping for the current browser session so their saved groups are preserved.
+7. Use **Export Markdown** to download the saved project notes and source links. Save pending project and source edits before exporting.
 
-## 📸 Screenshots
+**Replace saved tabs** replaces the collection with the selected current tabs after confirmation. Notes for retained URLs survive. Removing a source or deleting a project leaves open browser tabs untouched. Deleting a project retains its historical focus records in local storage.
+
+## Screenshots
 
 <p align="center">
   <img src="assets/tabgenius2.png" width="45%" alt="Dashboard View" />
@@ -30,91 +34,36 @@ TabGenius is a lightweight Chrome extension that helps you manage browser tabs a
   <em>Dashboard View &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Focus Mode</em>
 </p>
 
-## ✨ Features
+## What is saved
 
-| Feature | Description |
-|---|---|
-| 🗂️ Organize View | View, close, or navigate to any open tab |
-| ⏱️ Focus Mode | Set a countdown timer to stay on task |
-| 📌 Auto-Pin | Automatically pins frequently used tabs |
-| 🧹 Auto-Clear | Clears unused tabs automatically |
-| 🗃️ Auto-Group | Groups tabs by domain |
-| 💾 Persistent Sessions | Focus sessions saved across popup reloads |
-| 🔔 Notifications | Feedback for focus start/end actions |
+Projects store titles, HTTP/HTTPS URLs, notes, pins, and tab-group metadata in `chrome.storage.local`. Private tabs, browser-internal pages, and URLs containing embedded credentials are excluded. This feature does not upload project data or fetch page content.
 
----
+Restoration opens saved URLs; it does not capture scroll positions, login state, unsaved forms, or page contents. Repeated restores create additional windows. If restoration is interrupted, already-opened tabs stay open and the saved project remains available.
 
-## 🚀 Installation
+There are limits of 100 projects, 500 sources per project, 10,000 characters per project note, 4,000 characters per source note, and the most recent 1,000 focus sessions. Chrome's extension storage quota also applies; failed writes surface an error rather than silently discarding the previous collection. Export valuable notes regularly: local extension storage is removed when the extension is uninstalled.
 
-### Prerequisites
-- Google Chrome browser
+Existing grouping, pinning, cleanup, bookmarks, and focus blocking remain available under **Overview**, **Actions**, and **Focus**. **Insights** provides local statistics and rule-based suggestions; it does not use an AI model.
 
-### Steps
+## Development and checks
 
-**1. Clone the repository**
-```bashtabgenius/
-├── manifest.json      # Extension metadata & permissions
-├── popup.html         # Popup UI (Organize + Focus views)
-├── popup.js           # View switching, timer, tab logic
-├── popup.css          # Styles (400px width, compact UI)
-├── background.js      # Tab queries & notifications
-└── icons/             # Extension icons (16, 32, 48, 128px)'''
+No dependencies are required. Run the workspace and background integration checks with Node.js 20 or later:
 
----
-
-
----
-## 🐛 Debugging
-
-### View Switching
-Open popup → right-click → **Inspect** → Console. Look for:
-Nav button clicked: [organize|focus]
-switchView called with: [organize|focus]
-
-### Timer Not Starting
-Check Console for:
-Start button clicked, startFocus called, updateTimer called
-
-### Tabs Not Loading
-Go to `chrome://extensions/` → **Inspect views: service worker**. Look for:
-Background received message: { action: 'getTabs' }
-Sending tabs: ...
-
-
-### Clear Storage
-Run in Console:
-```javascript
-chrome.storage.local.clear(() => console.log('Storage cleared'));
-```
-
----
-
-## 🤝 Contributing
 ```bash
-# Fork the repo, then:
-git checkout -b feature-name
-git commit -m "Add feature"
-git push origin feature-name
-# Open a Pull Request
+node tests/research.test.cjs
 ```
 
----
+The checks cover persistence and concurrent saves, source-note retention, filtering of unsupported/private URLs, Markdown export, content-script access restrictions, window/group restoration, and project focus accounting. They use mocked Chrome APIs. A live extension check is still useful after loading the unpacked extension.
 
-## ⚠️ Known Issues
+Main files:
 
-- **View Switching** — If buttons don't respond, check Console for `View or button not found`
-- **Timer** — If `#focus-timer` stays empty, verify `startFocus called` in Console
-- **Tabs** — If list shows "Loading tabs...", check background Console for `Error querying tabs`
+| File | Purpose |
+|---|---|
+| `research-core.js` | Workspace storage, serialized writes, classification, Markdown export |
+| `research-background.js` | Validated project requests and tab restoration |
+| `research.js`, `research.css` | Research and project-focus UI |
+| `popup.html`, `popup.js`, `popup.css` | Shared popup, existing actions, focus controls |
+| `background.js` | Chrome events, alarms, focus state and session history |
+| `blocked.html`, `blocked.js` | Focus blocking page with packaged scripts |
+| `manifest.json` | Extension metadata, permissions and entry points |
 
----
-
-## 👤 Author
-
-**Abhishek Nehru**
-
-[![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Abhisheknehru)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://linkedin.com/in/abhisheknehru)
-
----
-
-![Footer](https://capsule-render.vercel.app/api?type=waving&color=0:00F7FF,100:6C63FF&height=100&section=footer)
+Inspect the popup using its context menu, or inspect the service worker from `chrome://extensions`, to troubleshoot errors.
