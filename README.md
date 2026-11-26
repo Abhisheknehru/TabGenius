@@ -2,14 +2,52 @@
 
 A Chrome Manifest V3 extension for keeping research papers, repositories, documentation, and notes together. Save a project's tabs, resume its sources in a new window, and track focused work against a specific task.
 
-## Install locally
+## Install and run on Ubuntu
 
-1. Download or clone this repository.
-2. Open `chrome://extensions` in Chrome.
-3. Enable **Developer mode**, choose **Load unpacked**, and select this folder (the one containing `manifest.json`).
-4. Pin TabGenius to the toolbar and open it.
+You need **Google Chrome** and **Git** installed on Ubuntu. There is no build step or API key, and you do not need Node.js to use the extension.
 
-After updating these files, click **Reload** on the TabGenius card at `chrome://extensions`, then reopen the popup. There is no build step or API key.
+### 1. Get the repository
+
+Open the Ubuntu terminal with **Ctrl + Alt + T**. For a first-time setup, clone the repository into your home directory:
+
+```bash
+cd ~
+git clone https://github.com/Abhisheknehru/TabGenius.git
+cd TabGenius
+```
+
+If you already cloned the repository, update your existing copy instead:
+
+```bash
+cd ~/TabGenius
+git pull --ff-only origin main
+```
+
+These commands assume the repository is in `~/TabGenius`. If you cloned it elsewhere, use that directory instead. If Git reports local changes or diverging branches, resolve them before updating; do not force an update over your work.
+
+### 2. Load the extension in Chrome
+
+1. Open **Google Chrome** on Ubuntu.
+2. Click the **Extensions** puzzle-piece icon near the address bar, then **Manage extensions**. Alternatively, enter `chrome://extensions` in the address bar.
+3. Turn on **Developer mode** in the top-right corner.
+4. Click **Load unpacked**.
+5. In the folder picker, select the cloned **TabGenius** directory. For the commands above, this is **Home → TabGenius** (`/home/<your-ubuntu-username>/TabGenius`). Select the directory containing `manifest.json`, rather than an individual file or a subfolder such as `assets`.
+6. Click **Select Folder** (or **Open**, depending on the folder picker). The **TabGenius — Research Workspaces** card should appear on the extensions page.
+7. Click Chrome's **Extensions** icon again and pin **TabGenius — Research Workspaces** to the toolbar.
+8. Click the TabGenius toolbar icon. In **Research**, create a project, select some open web tabs, and click **Add selected tabs** to check that it works.
+
+Keep the cloned directory in place: Chrome loads the unpacked extension from that location.
+
+### 3. Apply future updates
+
+Pull the latest changes in the terminal:
+
+```bash
+cd ~/TabGenius
+git pull --ff-only origin main
+```
+
+Then open **Extensions → Manage extensions** (`chrome://extensions`) and click the **Reload** circular-arrow button on the TabGenius card. Close any open TabGenius pages and reopen the toolbar popup so they use the updated files. You only need **Load unpacked** for the initial installation.
 
 ## Research workflow
 
